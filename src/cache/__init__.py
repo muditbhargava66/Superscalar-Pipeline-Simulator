@@ -1,3 +1,3 @@
-from .cache import InstructionCache, DataCache
+from .cache import InstructionCache, DataCache, Memory
 
-__all__ = ['InstructionCache', 'DataCache']
+__all__ = ['InstructionCache', 'DataCache', 'Memory']

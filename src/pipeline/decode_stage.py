@@ -9,10 +9,7 @@ class DecodeStage:
 
         for instruction in instructions:
             # Decode the instruction
-            opcode, operands = self.decode_instruction(instruction)
-
-            # Create a new Instruction object with the decoded information
-            decoded_instruction = Instruction(instruction.pc, opcode, operands)
+            decoded_instruction = self.decode_instruction(instruction)
 
             # Read the operand values from the register file
             self.read_operands(decoded_instruction)
@@ -23,28 +20,38 @@ class DecodeStage:
 
     def decode_instruction(self, instruction):
         # Extract the opcode and operands from the instruction
-        # Replace this with your actual decoding logic based on your instruction format
-        opcode = instruction.data & 0xFF  # Assuming opcode is the first byte
-        operand1 = (instruction.data >> 8) & 0xFF  # Assuming operand1 is the second byte
-        operand2 = (instruction.data >> 16) & 0xFF  # Assuming operand2 is the third byte
-        operands = [operand1, operand2]
-
-        return opcode, operands
+        opcode = instruction.opcode
+        operands = instruction.operands
+        destination = instruction.destination  # Add this line to get the destination
+        # Create a new Instruction object with the decoded information
+        decoded_instruction = Instruction(instruction.pc, opcode, operands, destination)  # Include destination
+        return decoded_instruction
 
     def read_operands(self, instruction):
         # Read the operand values from the register file
-        for i, operand in enumerate(instruction.operands):
+        operands = []
+        for operand in instruction.operands:
             if self.is_register(operand):
                 register_value = self.register_file.read_register(operand)
-                instruction.operands[i] = register_value
+                operands.append(register_value)
+            else:
+                operands.append(operand)
+        instruction.operands = operands
 
     def is_register(self, operand):
         # Check if the operand is a register
-        # Replace this with your actual logic to determine if an operand is a register
-        return True  # Assuming all operands are registers for simplicity
+        # Assuming the register names are in the format 'r<number>'
+        if isinstance(operand, str) and operand.startswith('r'):
+            try:
+                register_num = int(operand[1:])
+                return 0 <= register_num < self.register_file.num_registers
+            except ValueError:
+                return False
+        return False
 
 class RegisterFile:
     def __init__(self, num_registers):
+        self.num_registers = num_registers
         self.registers = [0] * num_registers
 
     def read_register(self, register_num):

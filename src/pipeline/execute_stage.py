@@ -1,20 +1,20 @@
-from utils.instruction import Instruction
 from utils.functional_unit import FunctionalUnit
 
 class ExecuteStage:
     def __init__(self, num_functional_units):
-        self.functional_units = [FunctionalUnit(i) for i in range(num_functional_units)]
+        self.functional_units = [
+            FunctionalUnit(i, supported_opcodes=["ADD", "SUB", "MUL", "DIV"]) 
+            for i in range(num_functional_units)
+        ]
 
-    def execute(self, ready_instructions):
+    def execute(self, ready_instructions, register_file):
         executed_instructions = []
 
         for instruction in ready_instructions:
-            # Find a free functional unit
             functional_unit = self.find_free_functional_unit(instruction.opcode)
 
             if functional_unit is not None:
-                # Execute the instruction on the functional unit
-                result = functional_unit.execute(instruction)
+                result = functional_unit.execute(instruction, register_file)
                 executed_instructions.append((instruction, result))
             else:
                 # No free functional unit available, stall the pipeline
