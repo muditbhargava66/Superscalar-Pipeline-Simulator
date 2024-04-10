@@ -1,49 +1,77 @@
 from utils.instruction import Instruction
 
 class FetchStage:
-    def __init__(self, instruction_cache, branch_predictor):
+    def __init__(self, instruction_cache, branch_predictor, memory):
         self.instruction_cache = instruction_cache
         self.branch_predictor = branch_predictor
+        self.memory = memory
         self.pc = 0
 
     def fetch(self):
         instructions = []
 
-        # Fetch multiple instructions from the instruction cache
         for _ in range(self.instruction_cache.fetch_bandwidth):
-            # Check if the instruction cache has the requested instruction
+            if self.pc >= self.memory.size:  # Check if PC is within memory bounds
+                break  # Stop fetching if PC is out of bounds
+
             if self.instruction_cache.has_instruction(self.pc):
-                # Fetch the instruction from the instruction cache
                 instruction_data = self.instruction_cache.get_instruction(self.pc)
-                instruction = Instruction(instruction_data)
+                instruction = self.parse_instruction(instruction_data)
                 instructions.append(instruction)
-
-                # Predict the next PC using the branch predictor
-                predicted_pc = self.branch_predictor.predict(instruction)
-
-                # Update the PC based on the branch prediction
-                if predicted_pc is not None:
-                    self.pc = predicted_pc
-                else:
-                    self.pc += 4  # Assuming a 32-bit instruction size
+                self.pc += 4  # Assuming a 32-bit instruction size
             else:
-                # Instruction cache miss, fetch the instruction from memory
                 instruction_data = self.fetch_from_memory(self.pc)
                 if instruction_data is not None:
-                    instruction = Instruction(instruction_data)
+                    instruction = self.parse_instruction(instruction_data)
                     instructions.append(instruction)
-                    self.pc += 4  # Assuming a 32-bit instruction size
+                    self.pc += 4  # Adjust PC as needed
                 else:
-                    # Memory access failed, handle accordingly (e.g., raise an exception)
+                    # Handle the case where memory access fails
                     raise MemoryAccessError(f"Failed to fetch instruction at PC: {self.pc}")
 
         return instructions
 
     def fetch_from_memory(self, address):
-        # Simulate fetching the instruction from memory
-        # Replace this with your memory access logic
-        memory_data = self.instruction_cache.read_from_memory(address)
-        return memory_data
+        # Determine the block start and end addresses
+        block_start_address = (address // self.instruction_cache.block_size) * self.instruction_cache.block_size
+        block_end_address = block_start_address + self.instruction_cache.block_size
+
+        # Check if the block end address is within the memory size
+        if block_end_address <= self.memory.size:
+            # Access the main memory and retrieve the block
+            block_data = self.memory.read(block_start_address, block_end_address)
+
+            # Parse the instruction data
+            instruction_offset = address - block_start_address
+            instruction_data = self.parse_instruction_data(block_data, instruction_offset)
+
+            return instruction_data
+        else:
+            return None
+
+    def parse_instruction_data(self, block_data, instruction_offset):
+        # Parse the instruction data based on your instruction format
+        # Example: Assuming a 32-bit instruction with opcode (8 bits), operand1 (8 bits), operand2 (8 bits), destination (8 bits)
+        instruction_data = block_data[instruction_offset:instruction_offset + 4]
+        opcode = instruction_data[0]
+        operand1 = instruction_data[1]
+        operand2 = instruction_data[2]
+        destination = instruction_data[3]
+
+        instruction_dict = {
+            'opcode': opcode,
+            'operands': [operand1, operand2],
+            'destination': destination
+        }
+
+        return instruction_dict
+
+    def parse_instruction(self, instruction_data):
+        opcode = instruction_data['opcode']
+        operands = instruction_data['operands']
+        destination = instruction_data['destination']
+        instruction = Instruction(self.pc, opcode, operands, destination)
+        return instruction
 
     def update_pc(self, new_pc):
         self.pc = new_pc
@@ -52,11 +80,12 @@ class FetchStage:
         return self.pc
 
 class InstructionCache:
-    def __init__(self, cache_size, block_size, memory):
+    def __init__(self, cache_size, block_size, memory, fetch_bandwidth):
         self.cache_size = cache_size
         self.block_size = block_size
         self.memory = memory
         self.cache = {}
+        self.fetch_bandwidth = fetch_bandwidth
 
     def has_instruction(self, address):
         block_address = address // self.block_size
@@ -69,18 +98,6 @@ class InstructionCache:
             return self.cache[block_address][block_offset]
         else:
             return None
-
-    def read_from_memory(self, address):
-        # Simulate reading the instruction from memory
-        # Replace this with your memory access logic
-        if address < len(self.memory):
-            return self.memory[address]
-        else:
-            return None
-
-    @property
-    def fetch_bandwidth(self):
-        return 4  # Assuming a fetch bandwidth of 4 instructions per cycle
 
 class MemoryAccessError(Exception):
     pass

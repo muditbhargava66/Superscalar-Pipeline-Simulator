@@ -75,3 +75,21 @@ class DataCache(Cache):
         # Replace this with actual memory access logic
         block_data = [0] * self.block_size
         return block_data
+
+class Memory:
+    def __init__(self, size):
+        self.size = size
+        self.data = [0] * size
+
+    def read(self, start_address, end_address):
+        if end_address > self.size:
+            raise MemoryAccessError(f"Memory access error: address out of range ({end_address} > {self.size})")
+        return self.data[start_address:end_address]
+
+    def write(self, start_address, data):
+        if start_address + len(data) > self.size:
+            raise MemoryAccessError(f"Memory access error: address out of range ({start_address + len(data)} > {self.size})")
+        self.data[start_address:start_address + len(data)] = data
+
+class MemoryAccessError(Exception):
+    pass
