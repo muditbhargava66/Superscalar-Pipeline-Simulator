@@ -123,7 +123,7 @@ The Superscalar Pipeline Simulator is open-source software licensed under the [M
 The Superscalar Pipeline Simulator was inspired by the concepts and techniques presented in the following resources:
 - "Computer Architecture: A Quantitative Approach" by John L. Hennessy and David A. Patterson
 - "Modern Processor Design: Fundamentals of Superscalar Processors" by John P. Shen and Mikko H. Lipasti
-- "Dynamic Instruction Scheduling and Data Forwarding Mechanisms" by Tse-Yu Yeh and Yale N. Patt
+- "Two-Level Adaptive Training Branch Prediction" by Tse-Yu Yeh and Yale N. Patt
 
 We would like to thank the authors and researchers whose work has contributed to the development of this simulator.
 
