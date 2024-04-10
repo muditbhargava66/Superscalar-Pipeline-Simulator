@@ -1,0 +1,39 @@
+# Pipeline Configuration
+pipeline:
+  num_stages: 6
+  fetch_width: 4
+  issue_width: 4
+  execute_units:
+    - type: ALU
+      count: 2
+    - type: FPU
+      count: 1
+    - type: LSU
+      count: 1
+
+# Branch Prediction Configuration
+branch_predictor:
+  type: gshare
+  num_entries: 1024
+  history_length: 8
+
+# Cache Configuration
+cache:
+  instruction_cache:
+    size: 32KB
+    block_size: 64
+    associativity: 4
+  data_cache:
+    size: 32KB
+    block_size: 64
+    associativity: 4
+
+# Simulation Configuration
+simulation:
+  num_instructions: 1000
+  output_file: simulation_results.txt
+
+# Debugging Configuration
+debug:
+  enabled: false
+  log_level: INFO

@@ -15,11 +15,11 @@ class FetchStage:
             if self.instruction_cache.has_instruction(self.pc):
                 # Fetch the instruction from the instruction cache
                 instruction_data = self.instruction_cache.get_instruction(self.pc)
-                instruction = Instruction(self.pc, instruction_data)
+                instruction = Instruction(instruction_data)
                 instructions.append(instruction)
 
                 # Predict the next PC using the branch predictor
-                predicted_pc = self.branch_predictor.predict(self.pc)
+                predicted_pc = self.branch_predictor.predict(instruction)
 
                 # Update the PC based on the branch prediction
                 if predicted_pc is not None:
@@ -30,7 +30,7 @@ class FetchStage:
                 # Instruction cache miss, fetch the instruction from memory
                 instruction_data = self.fetch_from_memory(self.pc)
                 if instruction_data is not None:
-                    instruction = Instruction(self.pc, instruction_data)
+                    instruction = Instruction(instruction_data)
                     instructions.append(instruction)
                     self.pc += 4  # Assuming a 32-bit instruction size
                 else:

@@ -1,24 +1,32 @@
-from src.pipeline import FetchStage, DecodeStage, IssueStage, ExecuteStage, MemoryAccessStage, WriteBackStage
-from src.branch_prediction import AlwaysTakenPredictor, GsharePredictor, BimodalPredictor
-from src.data_forwarding import DataForwardingUnit
-from src.utils import Instruction, Scoreboard
+from pipeline import FetchStage, DecodeStage, IssueStage, ExecuteStage, MemoryAccessStage, WriteBackStage
+from branch_prediction import AlwaysTakenPredictor, GsharePredictor, BimodalPredictor
+from data_forwarding import DataForwardingUnit
+from utils import Instruction, Scoreboard
+from cache import InstructionCache, DataCache
+from register_file import RegisterFile
 
 def main():
-    # Initialize pipeline stages
-    fetch_stage = FetchStage(instruction_cache, branch_predictor)
-    decode_stage = DecodeStage(register_file)
-    issue_stage = IssueStage(num_reservation_stations)
-    execute_stage = ExecuteStage(num_functional_units)
-    memory_access_stage = MemoryAccessStage(data_cache)
-    write_back_stage = WriteBackStage(register_file)
+    # Initialize instruction cache, data cache, and register file
+    memory = [0] * 1024  # Example memory size
+    instruction_cache = InstructionCache(cache_size=1024, block_size=64, fetch_bandwidth=4, memory=memory)
+    data_cache = DataCache(cache_size=1024, block_size=64)
+    register_file = RegisterFile(num_registers=32)
 
     # Initialize branch predictor
     branch_predictor = BimodalPredictor(num_entries=1024)
 
+    # Initialize pipeline stages
+    fetch_stage = FetchStage(instruction_cache, branch_predictor)
+    decode_stage = DecodeStage(register_file)
+    issue_stage = IssueStage(num_reservation_stations=4)
+    execute_stage = ExecuteStage(num_functional_units=2)
+    memory_access_stage = MemoryAccessStage(data_cache)
+    write_back_stage = WriteBackStage(register_file)
+
     # Initialize data forwarding unit
     forwarding_unit = DataForwardingUnit()
     forwarding_unit.add_forwarding_path(from_stage='execute', to_stage='decode', forwarding_condition=lambda instr: True)
-    forwarding_unit.add_forwarding_path(from_stage='memory', to_stage='execute', forwarding_condition=lambda instr: instr.is_load())
+    forwarding_unit.add_forwarding_path(from_stage='memory', to_stage='execute', forwarding_condition=lambda instr: instr.is_memory_operation())
 
     # Initialize scoreboard
     scoreboard = Scoreboard(num_registers=32)
@@ -60,7 +68,7 @@ def main():
 
         # Update branch predictor
         for instruction, _ in memory_results:
-            if isinstance(instruction, BranchInstruction):
+            if instruction.is_branch():
                 actual_outcome = instruction.is_taken()
                 branch_predictor.update(instruction, actual_outcome)
 
