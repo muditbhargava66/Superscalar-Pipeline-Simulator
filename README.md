@@ -14,6 +14,57 @@ The Superscalar Pipeline Simulator is a software tool that simulates the executi
 - Visualization of pipeline diagrams and simulation results
 - Extensible design for adding new instructions, pipeline stages, and branch prediction algorithms
 
+## Directory Structure
+```
+superscalar-pipeline-simulator/
+├── src/
+│   ├── __init__.py
+│   ├── cache/
+│   │   ├── __init__.py
+│   │   └── cache.py
+│   ├── register_file/
+│   │   ├── __init__.py
+│   │   └── register_file.py
+│   ├── pipeline/
+│   │   ├── __init__.py
+│   │   ├── fetch_stage.py
+│   │   ├── decode_stage.py
+│   │   ├── issue_stage.py
+│   │   ├── execute_stage.py
+│   │   ├── memory_access_stage.py
+│   │   └── write_back_stage.py
+│   ├── branch_prediction/
+│   │   ├── __init__.py
+│   │   ├── always_taken_predictor.py
+│   │   ├── gshare_predictor.py
+│   │   └── bimodal_predictor.py
+│   ├── data_forwarding/
+│   │   ├── __init__.py
+│   │   └── data_forwarding_unit.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── instruction.py
+│   │   ├── scoreboard.py
+│   │   ├── reservation_station.py
+│   │   └── functional_unit.py
+│   └── main.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_pipeline.py
+│   ├── test_branch_prediction.py
+│   └── test_data_forwarding.py
+├── benchmarks/
+│   ├── benchmark1.asm
+│   └── ...
+├── docs/
+│   ├── design_document.md
+│   └── user_guide.md
+├── config.yaml
+├── README.md
+├── LICENSE
+└── requirements.txt
+```
+
 ## Getting Started
 
 ### Prerequisites
@@ -43,7 +94,7 @@ The Superscalar Pipeline Simulator is a software tool that simulates the executi
 
 3. Run the simulator:
    ```
-   python main.py --config config.yaml --code assembly_code.asm
+   python src/main.py --config config.yaml --code assembly_code.asm
    ```
 
    - `--config`: Path to the configuration file (default: `config.yaml`)
@@ -68,17 +119,17 @@ Refer to the comments in the `config.yaml` file for detailed explanations of eac
 The simulator is designed to be extensible and customizable. You can add new instructions, modify pipeline stages, and implement different branch prediction algorithms. The modular structure of the code allows for easy integration of new features.
 
 To add a new instruction:
-1. Define the instruction format and encoding in the `instructions.py` file.
-2. Implement the instruction execution logic in the corresponding pipeline stage (e.g., `execute_stage.py`).
-3. Update the instruction decoding logic in the `decode_stage.py` file.
+1. Define the instruction format and encoding in the `src/utils/instruction.py` file.
+2. Implement the instruction execution logic in the corresponding pipeline stage (e.g., `src/pipeline/execute_stage.py`).
+3. Update the instruction decoding logic in the `src/pipeline/decode_stage.py` file.
 
 To modify pipeline stages or add new ones:
-1. Create a new file for the pipeline stage (e.g., `new_stage.py`) in the `pipeline` directory.
+1. Create a new file for the pipeline stage (e.g., `src/pipeline/new_stage.py`).
 2. Implement the necessary logic and functionality for the stage.
-3. Integrate the new stage into the pipeline flow in the `main.py` file.
+3. Integrate the new stage into the pipeline flow in the `src/main.py` file.
 
 To implement a new branch prediction algorithm:
-1. Create a new file for the branch predictor (e.g., `new_predictor.py`) in the `branch_prediction` directory.
+1. Create a new file for the branch predictor (e.g., `src/branch_prediction/new_predictor.py`).
 2. Implement the prediction and update logic for the branch predictor.
 3. Update the branch prediction configuration in the `config.yaml` file to include the new predictor.
 
