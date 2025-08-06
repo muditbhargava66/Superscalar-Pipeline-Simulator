@@ -1,140 +1,338 @@
-# User Guide: Superscalar Pipeline with Data Forwarding and Branch Prediction
+# User Guide
 
-This user guide provides instructions on how to set up, configure, and run the superscalar pipeline simulator with data forwarding and branch prediction.
+## Quick Start
 
-## Table of Contents
-1. [Introduction](#introduction)
-2. [System Requirements](#system-requirements)
-3. [Installation](#installation)
-4. [Configuration](#configuration)
-5. [Running the Simulator](#running-the-simulator)
-6. [Simulator Outputs](#simulator-outputs)
-7. [Customizing the Pipeline](#customizing-the-pipeline)
-8. [Troubleshooting](#troubleshooting)
-9. [FAQ](#faq)
+The Superscalar Pipeline Simulator is a comprehensive tool for simulating and analyzing superscalar processor architectures. This guide will help you get started quickly.
 
-## Introduction
-The superscalar pipeline simulator is a software tool that simulates the execution of instructions in a superscalar processor pipeline with data forwarding and branch prediction capabilities. It allows users to analyze the performance and behavior of the pipeline under different configurations and workloads.
+### Basic Usage
 
-## System Requirements
-To run the superscalar pipeline simulator, your system should meet the following requirements:
-- Operating System: Windows, macOS, or Linux
-- Python: Python 3.6 or higher
-- Memory: At least 4 GB RAM
-- Storage: At least 100 MB of free disk space
-
-## Installation
-Follow these steps to install the superscalar pipeline simulator:
-
-1. Clone the repository from GitHub:
-   ```
-   git clone https://github.com/muditbhargava66/Superscalar-Pipeline-Simulator-.git
+1. **Run a simple simulation:**
+   ```bash
+   python main.py --config config.yaml --benchmark benchmarks/benchmark1_matrix_multiplication.asm
    ```
 
-2. Navigate to the project directory:
-   ```
-   cd superscalar-pipeline
-   ```
-
-3. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
+2. **Enable visualization:**
+   ```bash
+   python main.py --config config.yaml --benchmark benchmarks/benchmark3_fibonacci.asm --visualize
    ```
 
-4. Verify the installation by running the unit tests:
-   ```
-   python -m unittest discover tests
+3. **Generate performance report:**
+   ```bash
+   python main.py --config config.yaml --benchmark benchmarks/benchmark4_memory_patterns.asm --profile
    ```
 
-   If all the tests pass, the installation is successful.
+### Using the GUI Configuration Tool
+
+For easier configuration management, use the GUI tool:
+
+```bash
+python -c "import sys; sys.path.insert(0, 'src'); from gui.config_gui import main; main()"
+```
+
+The GUI provides:
+- Pipeline parameter configuration
+- Branch predictor settings
+- Cache configuration
+- Simulation options
+- Load/save configuration files
 
 ## Configuration
-The superscalar pipeline simulator can be configured using a configuration file. The default configuration file is `config.yaml` located in the project root directory.
 
-The configuration file allows you to specify various parameters of the pipeline, such as:
-- Number of pipeline stages
-- Fetch width
-- Issue width
-- Number of functional units
-- Branch predictor type and configuration
-- Data forwarding paths
+### Configuration File Structure
 
-To modify the configuration, open the `config.yaml` file in a text editor and change the values of the desired parameters. Save the file after making the changes.
+The simulator uses YAML configuration files. Here's the basic structure:
 
-## Running the Simulator
-To run the superscalar pipeline simulator, use the following command:
+```yaml
+pipeline:
+  num_stages: 6
+  fetch_width: 4
+  issue_width: 4
+  execute_units:
+    ALU:
+      count: 2
+    FPU:
+      count: 1
+    LSU:
+      count: 1
+
+branch_predictor:
+  type: gshare
+  num_entries: 1024
+  history_length: 8
+
+cache:
+  instruction_cache:
+    size: 32768
+    block_size: 64
+    associativity: 4
+  data_cache:
+    size: 32768
+    block_size: 64
+    associativity: 4
+  memory_size: 1048576
+
+simulation:
+  max_cycles: 10000
+  output_file: simulation_results.txt
+  enable_visualization: false
+  enable_profiling: true
+
+debug:
+  enabled: false
+  log_level: INFO
 ```
-python main.py [--config CONFIG_FILE] [--benchmark BENCHMARK_FILE]
+
+### Pipeline Configuration
+
+- **num_stages**: Number of pipeline stages (typically 5-6)
+- **fetch_width**: Instructions fetched per cycle
+- **issue_width**: Instructions issued per cycle
+- **execute_units**: Number of each type of execution unit
+
+### Branch Predictor Options
+
+- **always_taken**: Simple predictor that always predicts taken
+- **bimodal**: Two-bit saturating counter predictor
+- **gshare**: Global history with shared pattern history table
+
+### Cache Configuration
+
+- **size**: Cache size in bytes
+- **block_size**: Cache block size in bytes
+- **associativity**: Number of ways (1 = direct mapped)
+
+## Benchmarks
+
+### Available Benchmarks
+
+1. **benchmark1_matrix_multiplication.asm**: Matrix multiplication (4x4)
+2. **benchmark2_bubble_sort.asm**: Bubble sort algorithm
+3. **benchmark3_fibonacci.asm**: Recursive Fibonacci calculation
+4. **benchmark4_memory_patterns.asm**: Memory access patterns
+
+### Creating Custom Benchmarks
+
+Benchmarks are written in MIPS assembly language:
+
+```assembly
+# Example benchmark
+.data
+test_var: .word 42
+
+.text
+.globl main
+
+main:
+    li $t0, 10
+    li $t1, 20
+    add $t2, $t0, $t1
+    li $v0, 10
+    syscall
 ```
 
-- `--config CONFIG_FILE`: Specifies the path to the configuration file. If not provided, the default `config.yaml` file will be used.
-- `--benchmark BENCHMARK_FILE`: Specifies the path to the benchmark file containing the assembly code to be simulated. If not provided, a default benchmark will be used.
+### Benchmark Guidelines
 
-Example:
+- Use `.globl main` to define the entry point
+- End with `syscall` to terminate
+- Use meaningful comments
+- Test different instruction types
+- Consider cache behavior
+
+## Output and Analysis
+
+### Simulation Output
+
+The simulator generates detailed output including:
+
+- Execution statistics
+- Pipeline utilization
+- Branch prediction accuracy
+- Cache hit/miss rates
+- Performance metrics
+
+### Performance Metrics
+
+- **IPC (Instructions Per Cycle)**: Overall performance measure
+- **Branch Prediction Accuracy**: Percentage of correct predictions
+- **Cache Hit Rate**: Percentage of cache hits
+- **Pipeline Stalls**: Cycles lost to hazards
+
+### Visualization
+
+When visualization is enabled, you'll see:
+
+- Pipeline stage utilization over time
+- Instruction flow through stages
+- Hazard detection and resolution
+- Performance trends
+
+## Advanced Usage
+
+### Enhanced Command Line Interface
+
+The simulator now includes an enhanced command-line interface with comprehensive options:
+
+```bash
+python main.py [options]
+
+Configuration Options:
+  --config, -c CONFIG           Configuration file (default: config.yaml)
+  --generate-config FILE        Generate example configuration file
+  --validate-config FILE        Validate configuration file
+
+Simulation Options:
+  --benchmark, -b BENCH         Benchmark file to run
+  --output, -o OUTPUT           Output file for results
+  --visualize                   Enable pipeline visualization
+
+Profiling Options:
+  --profile                     Enable performance profiling
+  --memory-profile              Enable memory profiling
+
+Debug Options:
+  --debug                       Enable debug mode
+  --log-level LEVEL             Set logging level (DEBUG, INFO, WARNING, ERROR)
 ```
-python main.py --config custom_config.yaml --benchmark benchmarks/benchmark1.asm
+
+### Enhanced Configuration Management
+
+The simulator now uses Pydantic for robust configuration validation:
+
+```python
+from config import ConfigManager, SimulatorConfig
+
+# Load and validate configuration
+config_manager = ConfigManager()
+config = config_manager.load_from_file('config.yaml')
+
+# Environment variable overrides
+# SIMULATOR_PIPELINE__FETCH_WIDTH=8
+# SIMULATOR_DEBUG__ENABLED=true
+
+# Programmatic configuration updates
+config_manager.update_config({
+    'pipeline': {'issue_width': 6},
+    'simulation': {'max_cycles': 50000}
+})
 ```
 
-This command runs the simulator using the `custom_config.yaml` configuration file and the `benchmark1.asm` benchmark file.
+### Performance Profiling
 
-## Simulator Outputs
-During the simulation, the simulator provides real-time information about the pipeline execution, such as:
-- Instruction fetch, decode, issue, execute, memory access, and write-back stages
-- Branch predictions and their accuracy
-- Data forwarding occurrences
-- Pipeline stalls and their causes
-- Execution time and instructions per cycle (IPC)
+Comprehensive performance analysis with bottleneck identification:
 
-The simulation results are displayed on the console and can also be logged to a file using the logging configuration in the `config.yaml` file.
+```python
+from profiling import PerformanceProfiler, MemoryProfiler
 
-## Customizing the Pipeline
-The superscalar pipeline simulator allows you to customize various aspects of the pipeline, such as adding new instructions, modifying the pipeline stages, or implementing different branch prediction algorithms.
+# Performance profiling
+profiler = PerformanceProfiler()
+with profiler.profile_simulation() as session:
+    # Run simulation
+    results = simulator.run()
 
-To customize the pipeline, you can modify the relevant source code files in the `src/` directory. The key components of the pipeline are:
-- `src/pipeline/`: Contains the implementation of the pipeline stages.
-- `src/branch_prediction/`: Contains the implementation of branch prediction algorithms.
-- `src/data_forwarding/`: Contains the implementation of the data forwarding unit.
-- `src/utils/`: Contains utility classes and functions used throughout the project.
+profile_result = session.get_results()
+print(f"Execution time: {profile_result.execution_time:.3f}s")
+print(f"Bottlenecks: {len(profile_result.bottlenecks)}")
+for rec in profile_result.recommendations:
+    print(f"- {rec}")
+```
 
-After making the desired modifications, rebuild the project and run the simulator with the updated code.
+### Error Handling
+
+Structured error handling with detailed context:
+
+```python
+from exceptions import SimulatorError, handle_simulator_error
+
+try:
+    simulator.run()
+except SimulatorError as e:
+    error_info = handle_simulator_error(e, logger)
+    print(f"Error: {error_info['message']}")
+    print(f"Details: {error_info['details']}")
+```
+
+### Batch Processing
+
+Run multiple benchmarks:
+
+```bash
+#!/bin/bash
+for benchmark in benchmarks/*.asm; do
+    echo "Running $benchmark"
+    python main.py --config config.yaml --benchmark "$benchmark" --output "results/$(basename $benchmark .asm).txt"
+done
+```
+
+### Performance Analysis
+
+For detailed performance analysis:
+
+```bash
+# Generate comprehensive report
+python main.py --config config.yaml --benchmark benchmarks/benchmark4_memory_patterns.asm --profile --output performance_report.json
+
+# Analyze results
+python -c "
+import json
+with open('performance_report.json') as f:
+    data = json.load(f)
+print(f'IPC: {data[\"ipc\"]:.2f}')
+print(f'Branch Accuracy: {data[\"branch_accuracy\"]:.1f}%')
+print(f'Cache Hit Rate: {data[\"cache_hit_rate\"]:.1f}%')
+"
+```
 
 ## Troubleshooting
-If you encounter any issues while running the superscalar pipeline simulator, consider the following troubleshooting steps:
 
-1. Verify that your system meets the requirements specified in the [System Requirements](#system-requirements) section.
+### Common Issues
 
-2. Ensure that you have followed the installation instructions correctly and have installed all the required dependencies.
+1. **Import Errors**: Make sure you're in the project root directory
+2. **Configuration Errors**: Validate YAML syntax
+3. **Benchmark Errors**: Check assembly syntax
+4. **Memory Issues**: Increase memory size in configuration
+5. **Performance Issues**: Reduce max_cycles or benchmark complexity
 
-3. Check the configuration file (`config.yaml`) for any incorrect or missing parameters.
+### Debug Mode
 
-4. Verify that the benchmark file is in the correct format and contains valid assembly code.
+Enable debug mode for detailed logging:
 
-5. If you encounter errors or exceptions during the simulation, refer to the error messages and traceback for clues on the cause of the issue.
+```bash
+python main.py --config config.yaml --benchmark benchmarks/benchmark1_matrix_multiplication.asm --debug
+```
 
-6. Consult the [FAQ](#faq) section for common questions and solutions.
+### Getting Help
 
-If the issue persists, please open an issue on the project's GitHub repository, providing detailed information about the problem and the steps to reproduce it.
+- Check the [Installation Guide](installation.md)
+- Review [API Reference](api_reference.md)
+- See [Examples](examples/)
+- Open an issue on GitHub
 
-## FAQ
+## Best Practices
 
-**Q: Can I use a different assembly language other than MIPS for the benchmarks?**
+### Configuration
 
-A: The current version of the superscalar pipeline simulator is designed to work with MIPS assembly language. If you want to use a different assembly language, you would need to modify the simulator to support the syntax and semantics of that language.
+- Start with default configuration
+- Modify one parameter at a time
+- Document configuration changes
+- Use meaningful output filenames
 
-**Q: How can I analyze the performance of the pipeline in more detail?**
+### Benchmarking
 
-A: The simulator provides basic performance metrics such as execution time and instructions per cycle (IPC). For more detailed analysis, you can modify the code to collect additional statistics or use external performance analysis tools that are compatible with the simulator's output.
+- Test with multiple benchmarks
+- Vary input sizes
+- Consider different instruction mixes
+- Analyze cache behavior
 
-**Q: Can I contribute to the development of the superscalar pipeline simulator?**
+### Performance Analysis
 
-A: Yes, contributions to the project are welcome! If you have any improvements, bug fixes, or new features to propose, please submit a pull request on the project's GitHub repository. Make sure to follow the contribution guidelines outlined in the repository.
+- Compare different configurations
+- Look for bottlenecks
+- Consider trade-offs
+- Validate results with theory
 
-**Q: How can I report a bug or issue with the simulator?**
+## Next Steps
 
-A: If you encounter any bugs or issues with the superscalar pipeline simulator, please open an issue on the project's GitHub repository. Provide a clear description of the problem, steps to reproduce it, and any relevant error messages or logs.
-
-**Q: Is there a graphical user interface (GUI) for the simulator?**
-
-A: The current version of the simulator does not include a GUI. It is primarily designed to be used through the command line interface (CLI). However, you can explore the possibility of integrating a GUI as a future enhancement to the project.
-
----
+- Explore [Advanced Configuration](configuration.md)
+- Try [Tutorial Examples](tutorials/)
+- Read [Architecture Documentation](architecture.md)
+- Contribute to the project (see [Contributing Guide](contributing.md))
