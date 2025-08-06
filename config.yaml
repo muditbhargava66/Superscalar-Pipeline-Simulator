@@ -4,11 +4,11 @@ pipeline:
   fetch_width: 4
   issue_width: 4
   execute_units:
-    - type: ALU
+    ALU:
       count: 2
-    - type: FPU
+    FPU:
       count: 1
-    - type: LSU
+    LSU:
       count: 1
 
 # Branch Prediction Configuration

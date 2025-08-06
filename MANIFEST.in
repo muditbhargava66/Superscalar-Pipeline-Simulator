@@ -1,0 +1,46 @@
+# Include the README and license
+include README.md
+include LICENSE
+
+# Include configuration files
+include config.yaml
+include pyproject.toml
+
+# Include requirements files
+include requirements.txt
+include requirements-dev.txt
+
+# Include documentation
+recursive-include docs *.md *.rst *.txt *.py
+recursive-include docs *.png *.jpg *.svg
+
+# Include benchmarks
+recursive-include benchmarks *.asm *.txt
+
+# Include examples
+recursive-include examples *.py *.yaml *.asm *.md
+
+# Include tests
+recursive-include tests *.py
+
+# Exclude development and temporary files
+exclude fix_typing_imports.py
+exclude pipeline_fixes.py
+exclude run_validation.py
+exclude test_benchmarks.py
+exclude test_runner.py
+exclude BENCHMARK_ANALYSIS_REPORT.md
+exclude COMPLETION_SUMMARY.md
+exclude ENHANCED_FEATURES.md
+exclude FINAL_STATUS_REPORT.md
+exclude FIXES_SUMMARY.md
+exclude simulation_results.txt
+exclude benchmark_validation_results.json
+
+# Exclude cache and build directories
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .coverage
+global-exclude htmlcov

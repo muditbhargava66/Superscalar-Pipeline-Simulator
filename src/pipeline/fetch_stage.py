@@ -1,4 +1,14 @@
-from utils.instruction import Instruction
+# Handle imports for both package and direct execution
+try:
+    from ..cache.cache import InstructionCache
+    from ..utils.instruction import Instruction
+except (ImportError, ValueError):
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    from utils.instruction import Instruction
+import logging
+
 
 class FetchStage:
     def __init__(self, instruction_cache, branch_predictor, memory):
@@ -7,70 +17,86 @@ class FetchStage:
         self.memory = memory
         self.pc = 0
 
+    def load_program(self, program_file):
+        try:
+            with open(program_file) as file:
+                instructions = file.readlines()
+
+            for i, instruction_str in enumerate(instructions):
+                instruction_data = self.parse_instruction_data(instruction_str)
+                if instruction_data is not None:
+                    self.instruction_cache.add_instruction(i * 4, instruction_data)
+        except FileNotFoundError:
+            logging.error(f"Program file '{program_file}' not found.")
+            raise
+
     def fetch(self):
         instructions = []
 
         for _ in range(self.instruction_cache.fetch_bandwidth):
-            if self.pc >= self.memory.size:  # Check if PC is within memory bounds
-                break  # Stop fetching if PC is out of bounds
+            if self.pc >= self.memory.size:
+                break
 
             if self.instruction_cache.has_instruction(self.pc):
                 instruction_data = self.instruction_cache.get_instruction(self.pc)
-                instruction = self.parse_instruction(instruction_data)
-                instructions.append(instruction)
-                self.pc += 4  # Assuming a 32-bit instruction size
-            else:
-                instruction_data = self.fetch_from_memory(self.pc)
-                if instruction_data is not None:
+                if isinstance(instruction_data, dict):
                     instruction = self.parse_instruction(instruction_data)
-                    instructions.append(instruction)
-                    self.pc += 4  # Adjust PC as needed
+                    if instruction is not None:
+                        instructions.append(instruction)
+                        predicted_pc = self.branch_predictor.predict(instruction)
+                        if predicted_pc is not None:
+                            self.pc = predicted_pc
+                        else:
+                            self.pc += 4
+                    else:
+                        logging.warning(f"Skipping invalid instruction data at PC: {self.pc}")
+                        self.pc += 4
                 else:
-                    # Handle the case where memory access fails
-                    raise MemoryAccessError(f"Failed to fetch instruction at PC: {self.pc}")
+                    logging.warning(f"Instruction data is not a dictionary at PC: {self.pc}")
+                    self.pc += 4
+            else:
+                logging.debug(f"Instruction cache miss at PC: {self.pc}")
+                self.pc += 4
 
         return instructions
 
-    def fetch_from_memory(self, address):
-        # Determine the block start and end addresses
-        block_start_address = (address // self.instruction_cache.block_size) * self.instruction_cache.block_size
-        block_end_address = block_start_address + self.instruction_cache.block_size
-
-        # Check if the block end address is within the memory size
-        if block_end_address <= self.memory.size:
-            # Access the main memory and retrieve the block
-            block_data = self.memory.read(block_start_address, block_end_address)
-
-            # Parse the instruction data
-            instruction_offset = address - block_start_address
-            instruction_data = self.parse_instruction_data(block_data, instruction_offset)
-
-            return instruction_data
-        else:
+    def parse_instruction_data(self, instruction_str):
+        if not instruction_str.strip():
             return None
 
-    def parse_instruction_data(self, block_data, instruction_offset):
-        # Parse the instruction data based on your instruction format
-        # Example: Assuming a 32-bit instruction with opcode (8 bits), operand1 (8 bits), operand2 (8 bits), destination (8 bits)
-        instruction_data = block_data[instruction_offset:instruction_offset + 4]
-        opcode = instruction_data[0]
-        operand1 = instruction_data[1]
-        operand2 = instruction_data[2]
-        destination = instruction_data[3]
+        if instruction_str.strip().startswith('.') or ':' in instruction_str:
+            return None
+
+        parts = instruction_str.strip().split()
+        if not parts:
+            return None
+        opcode = parts[0]
+        operands = parts[1:]
 
         instruction_dict = {
             'opcode': opcode,
-            'operands': [operand1, operand2],
-            'destination': destination
+            'operands': operands
         }
 
         return instruction_dict
 
     def parse_instruction(self, instruction_data):
-        opcode = instruction_data['opcode']
-        operands = instruction_data['operands']
-        destination = instruction_data['destination']
-        instruction = Instruction(self.pc, opcode, operands, destination)
+        if instruction_data is None:
+            logging.error("Instruction data is None")
+            return None
+
+        if not isinstance(instruction_data, dict):
+            logging.error("Instruction data is not a dictionary")
+            return None
+
+        opcode = instruction_data.get('opcode')
+        operands = instruction_data.get('operands', [])
+
+        if opcode is None:
+            logging.error("Invalid instruction data format")
+            return None
+
+        instruction = Instruction(self.pc, opcode, operands)
         return instruction
 
     def update_pc(self, new_pc):
@@ -79,25 +105,17 @@ class FetchStage:
     def get_pc(self):
         return self.pc
 
-class InstructionCache:
-    def __init__(self, cache_size, block_size, memory, fetch_bandwidth):
-        self.cache_size = cache_size
-        self.block_size = block_size
-        self.memory = memory
-        self.cache = {}
-        self.fetch_bandwidth = fetch_bandwidth
-
-    def has_instruction(self, address):
-        block_address = address // self.block_size
-        return block_address in self.cache
-
-    def get_instruction(self, address):
-        block_address = address // self.block_size
-        block_offset = address % self.block_size
-        if block_address in self.cache:
-            return self.cache[block_address][block_offset]
-        else:
-            return None
-
 class MemoryAccessError(Exception):
+    pass
+
+class InstructionCacheMissError(Exception):
+    pass
+
+class InstructionParseError(Exception):
+    pass
+
+class InstructionCacheError(Exception):
+    pass
+
+class InstructionDataError(Exception):
     pass
