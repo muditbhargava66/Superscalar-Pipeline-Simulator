@@ -327,7 +327,6 @@ All contributions go through code review:
 ## Getting Help
 
 - **GitHub Issues**: For bugs and feature requests
-- **Discussions**: For questions and general discussion
 - **Documentation**: Check the `docs/` directory
 - **Examples**: Review code in the `examples/` directory
 

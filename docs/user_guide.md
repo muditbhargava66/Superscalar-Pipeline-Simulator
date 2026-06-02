@@ -8,17 +8,18 @@ The Superscalar Pipeline Simulator is a comprehensive tool for simulating and an
 
 1. **Run a simple simulation:**
    ```bash
-   python main.py --config config.yaml --benchmark benchmarks/benchmark1_matrix_multiplication.asm
+   python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
    ```
 
-2. **Enable visualization:**
+2. **Run with different benchmarks:**
    ```bash
-   python main.py --config config.yaml --benchmark benchmarks/benchmark3_fibonacci.asm --visualize
+   python main.py --benchmark benchmarks/simple_sort.asm --max-cycles 100
+   python main.py --benchmark benchmarks/simple_fibonacci.asm --max-cycles 100
    ```
 
 3. **Generate performance report:**
    ```bash
-   python main.py --config config.yaml --benchmark benchmarks/benchmark4_memory_patterns.asm --profile
+   python main.py --benchmark benchmarks/basic_operations.asm --max-cycles 200 --profile
    ```
 
 ### Using the GUI Configuration Tool
@@ -105,10 +106,18 @@ debug:
 
 ### Available Benchmarks
 
-1. **benchmark1_matrix_multiplication.asm**: Matrix multiplication (4x4)
-2. **benchmark2_bubble_sort.asm**: Bubble sort algorithm
-3. **benchmark3_fibonacci.asm**: Recursive Fibonacci calculation
-4. **benchmark4_memory_patterns.asm**: Memory access patterns
+1. **simple_arithmetic.asm**: Basic arithmetic operations and control flow
+2. **simple_sort.asm**: Simple sorting algorithm with comparisons and swaps
+3. **simple_fibonacci.asm**: Iterative Fibonacci calculation
+4. **basic_operations.asm**: Fundamental processor operations and control flow
+5. **memory_access_patterns.asm**: Various memory access patterns for cache analysis
+6. **validation_suite.asm**: Comprehensive test suite for simulator validation
+
+### Legacy Benchmarks (Complex)
+
+1. **matrix_multiplication.asm**: 4x4 matrix multiplication (requires parser enhancements)
+2. **bubble_sort.asm**: Bubble sort algorithm (requires parser enhancements)
+3. **fibonacci_recursive.asm**: Recursive Fibonacci (requires parser enhancements)
 
 ### Creating Custom Benchmarks
 
@@ -251,6 +260,35 @@ except SimulatorError as e:
     print(f"Details: {error_info['details']}")
 ```
 
+### Development Tools
+
+The project uses modern Python development tools:
+
+**Code Quality:**
+- **Ruff**: Fast linting and formatting (replaces black, isort, flake8)
+  ```bash
+  # Check code quality
+  ruff check src/ tests/
+  
+  # Format code
+  ruff format src/ tests/
+  ```
+
+- **MyPy**: Static type checking
+  ```bash
+  # Type check
+  mypy src/ --ignore-missing-imports
+  ```
+
+- **Pre-commit**: Automated hooks before commits
+  ```bash
+  # Install hooks
+  pre-commit install
+  
+  # Run manually
+  pre-commit run --all-files
+  ```
+
 ### Batch Processing
 
 Run multiple benchmarks:
@@ -261,6 +299,48 @@ for benchmark in benchmarks/*.asm; do
     echo "Running $benchmark"
     python main.py --config config.yaml --benchmark "$benchmark" --output "results/$(basename $benchmark .asm).txt"
 done
+```
+
+### Example Usage
+
+Run the examples to learn different aspects of the simulator:
+
+```bash
+# Basic simulation concepts
+python examples/basic_simulation.py
+
+# Advanced processor features
+python examples/advanced_pipeline_features.py
+
+# Configuration management
+python examples/configuration_management.py
+
+# Performance analysis
+python examples/performance_analysis.py
+
+# Error handling
+python examples/error_handling_showcase.py
+```
+
+### Working Benchmarks
+
+The following benchmarks are tested and working with the current simulator:
+
+```bash
+# Simple benchmarks (recommended for testing)
+python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
+python main.py --benchmark benchmarks/simple_sort.asm --max-cycles 100
+python main.py --benchmark benchmarks/simple_fibonacci.asm --max-cycles 100
+
+# Complex benchmarks (advanced functionality)
+python main.py --benchmark benchmarks/basic_operations.asm --max-cycles 200
+python main.py --benchmark benchmarks/validation_suite.asm --max-cycles 100
+
+# Research-grade benchmarks (comprehensive testing)
+python main.py --benchmark benchmarks/bubble_sort.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/fibonacci_recursive.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/matrix_multiplication.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/memory_access_patterns.asm --max-cycles 200 --profile
 ```
 
 ### Performance Analysis
@@ -309,6 +389,13 @@ python main.py --config config.yaml --benchmark benchmarks/benchmark1_matrix_mul
 
 ## Best Practices
 
+### Code Quality
+
+- **Use Pre-commit Hooks**: Install with `pre-commit install` to automatically check code before commits
+- **Run Ruff Regularly**: `ruff check src/ tests/` to catch issues early
+- **Type Check**: `mypy src/ --ignore-missing-imports` to ensure type safety
+- **Format Consistently**: `ruff format src/ tests/` to maintain consistent style
+
 ### Configuration
 
 - Start with default configuration
@@ -332,7 +419,7 @@ python main.py --config config.yaml --benchmark benchmarks/benchmark1_matrix_mul
 
 ## Next Steps
 
-- Explore [Advanced Configuration](configuration.md)
-- Try [Tutorial Examples](tutorials/)
-- Read [Architecture Documentation](architecture.md)
-- Contribute to the project (see [Contributing Guide](contributing.md))
+- Try [Tutorial Examples](../examples/)
+- Read [Architecture Documentation](design_document.md)
+- Learn about [Code Quality Tools](#development-tools)
+- Contribute to the project (see [Contributing Guide](../CONTRIBUTING.md))

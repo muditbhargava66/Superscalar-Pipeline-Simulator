@@ -6,8 +6,9 @@ and visualization of the simulator.
 """
 
 try:
-    from .config_gui import ConfigGUI
-    __all__ = ['ConfigGUI']
+    from .config_gui import ConfigGUI  # type: ignore[attr-defined]
+
+    __all__ = ["ConfigGUI"]
 except ImportError:
     # GUI dependencies not available
     __all__ = []

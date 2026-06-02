@@ -8,7 +8,7 @@ instruction execution using various functional units.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # Handle imports for both package and direct execution
 try:
@@ -19,6 +19,7 @@ try:
 except (ImportError, ValueError):
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from cache.cache import DataCache, Memory
     from register_file.register_file import RegisterFile
@@ -29,21 +30,23 @@ except (ImportError, ValueError):
 class ExecuteStage:
     """
     Execute stage of the pipeline.
-    
+
     Manages multiple functional units and schedules instructions
     for execution based on availability and type.
     """
 
-    def __init__(self,
-                 num_alu_units: int,
-                 num_fpu_units: int,
-                 num_lsu_units: int,
-                 register_file: RegisterFile,
-                 data_cache: DataCache,
-                 memory: Memory) -> None:
+    def __init__(
+        self,
+        num_alu_units: int,
+        num_fpu_units: int,
+        num_lsu_units: int,
+        register_file: RegisterFile,
+        data_cache: DataCache,
+        memory: Memory,
+    ) -> None:
         """
         Initialize the execute stage with functional units.
-        
+
         Args:
             num_alu_units: Number of ALU units
             num_fpu_units: Number of FPU units
@@ -79,16 +82,20 @@ class ExecuteStage:
         self.stats = FunctionalUnitStats()
         self.executed_count = 0
 
-        logging.info(f"Initialized Execute Stage with {num_alu_units} ALUs, "
-                    f"{num_fpu_units} FPUs, {num_lsu_units} LSUs")
+        logging.info(
+            f"Initialized Execute Stage with {num_alu_units} ALUs, "
+            f"{num_fpu_units} FPUs, {num_lsu_units} LSUs"
+        )
 
-    def execute(self, ready_instructions: List[Instruction]) -> List[Tuple[Instruction, Any]]:
+    def execute(
+        self, ready_instructions: List[Instruction]
+    ) -> List[Tuple[Instruction, Any]]:
         """
         Execute ready instructions on available functional units.
-        
+
         Args:
             ready_instructions: List of instructions ready for execution
-            
+
         Returns:
             List of (instruction, result) tuples for completed instructions
         """
@@ -124,7 +131,9 @@ class ExecuteStage:
             else:
                 # No free functional unit available - structural hazard
                 self.stats.record_stall()
-                logging.debug(f"Structural hazard: No free unit for {instruction.opcode}")
+                logging.debug(
+                    f"Structural hazard: No free unit for {instruction.opcode}"
+                )
                 # Don't break - other instructions might find free units
 
         # Check for completed instructions
@@ -137,20 +146,22 @@ class ExecuteStage:
                 executed_instructions.append((instruction, result))
                 self.executed_count += 1
 
-                logging.debug(f"Completed execution of {instruction} with result {result}")
+                logging.debug(
+                    f"Completed execution of {instruction} with result {result}"
+                )
 
         # Update cycle counter for statistics
         self.stats.update_cycle()
 
         return executed_instructions
 
-    def find_free_functional_unit(self, opcode: str) -> Optional[Any]:
+    def find_free_functional_unit(self, opcode: str) -> Any | None:
         """
         Find a free functional unit that can execute the given opcode.
-        
+
         Args:
             opcode: Instruction opcode
-            
+
         Returns:
             Free functional unit or None if none available
         """
@@ -162,7 +173,7 @@ class ExecuteStage:
     def update_functional_units(self) -> None:
         """
         Update all functional units for one cycle.
-        
+
         This is called at the end of each cycle to progress
         multi-cycle operations.
         """
@@ -181,46 +192,53 @@ class ExecuteStage:
     def get_unit_status(self) -> List[Dict[str, Any]]:
         """
         Get status of all functional units.
-        
+
         Returns:
             List of unit status dictionaries
         """
         status = []
         for unit in self.functional_units:
-            status.append({
-                'id': unit.id,
-                'type': unit.__class__.__name__,
-                'busy': unit.busy,
-                'remaining_cycles': unit.remaining_cycles,
-                'current_instruction': str(unit.current_instruction) if unit.current_instruction else None,
-                'utilization': self.stats.get_utilization(unit.id)
-            })
+            status.append(
+                {
+                    "id": unit.id,
+                    "type": unit.__class__.__name__,
+                    "busy": unit.busy,
+                    "remaining_cycles": unit.remaining_cycles,
+                    "current_instruction": str(unit.current_instruction)
+                    if unit.current_instruction
+                    else None,
+                    "utilization": self.stats.get_utilization(unit.id),
+                }
+            )
         return status
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get execution stage statistics.
-        
+
         Returns:
             Dictionary of statistics
         """
         # Calculate average utilization
         total_utilization = sum(
-            self.stats.get_utilization(unit.id)
-            for unit in self.functional_units
+            self.stats.get_utilization(unit.id) for unit in self.functional_units
         )
-        avg_utilization = total_utilization / len(self.functional_units) if self.functional_units else 0
+        avg_utilization = (
+            total_utilization / len(self.functional_units)
+            if self.functional_units
+            else 0
+        )
 
         return {
-            'executed_instructions': self.executed_count,
-            'structural_stalls': self.stats.total_stalls,
-            'structural_stall_rate': self.stats.get_structural_stall_rate(),
-            'average_utilization': avg_utilization,
-            'unit_utilization': {
+            "executed_instructions": self.executed_count,
+            "structural_stalls": self.stats.total_stalls,
+            "structural_stall_rate": self.stats.get_structural_stall_rate(),
+            "average_utilization": avg_utilization,
+            "unit_utilization": {
                 unit.id: self.stats.get_utilization(unit.id)
                 for unit in self.functional_units
             },
-            'opcode_distribution': self.stats.get_opcode_distribution()
+            "opcode_distribution": self.stats.get_opcode_distribution(),
         }
 
     def reset(self) -> None:
@@ -241,7 +259,7 @@ class ExecuteStage:
 class OutOfOrderExecuteStage(ExecuteStage):
     """
     Enhanced execute stage with out-of-order execution support.
-    
+
     Adds:
     - Instruction window for better scheduling
     - Dynamic instruction selection
@@ -253,7 +271,9 @@ class OutOfOrderExecuteStage(ExecuteStage):
         self.window_size = window_size
         self.instruction_window: List[Instruction] = []
 
-    def execute(self, ready_instructions: List[Instruction]) -> List[Tuple[Instruction, Any]]:
+    def execute(
+        self, ready_instructions: List[Instruction]
+    ) -> List[Tuple[Instruction, Any]]:
         """
         Execute with out-of-order scheduling from instruction window.
         """
@@ -312,11 +332,11 @@ class OutOfOrderExecuteStage(ExecuteStage):
 
         return executed_instructions
 
-    def get_window_status(self) -> Dict[str, Any]:
+    def get_window_status(self) -> dict[str, Any]:
         """Get status of the instruction window."""
         return {
-            'window_size': self.window_size,
-            'current_occupancy': len(self.instruction_window),
-            'utilization': len(self.instruction_window) / self.window_size * 100,
-            'instructions': [str(inst) for inst in self.instruction_window]
+            "window_size": self.window_size,
+            "current_occupancy": len(self.instruction_window),
+            "utilization": len(self.instruction_window) / self.window_size * 100,
+            "instructions": [str(inst) for inst in self.instruction_window],
         }

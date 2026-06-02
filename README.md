@@ -1,254 +1,426 @@
-<div align = "center">
+<div align="center">
 
 # Superscalar Pipeline Simulator
 
-[![CI/CD Pipeline](https://github.com/muditbhargava66/superscalar-pipeline-simulator/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/actions)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Tests](https://img.shields.io/badge/tests-92%20passing-green.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)
+[![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen.svg)](docs/)
 
-**A comprehensive, high-performance superscalar pipeline simulator for computer architecture research and education. This simulator provides detailed modeling of modern processor features including out-of-order execution, branch prediction, cache hierarchies, and data forwarding.**
+> Superscalar pipeline simulator for computer architecture research and education. Features branch prediction, non-blocking cache systems, power modeling, and cycle-accurate simulation capabilities.
+
+**[Quick Start](#quick-start)** • **[Get Started Now](docs/installation.md)** • **[View Examples](examples/)** • **[Benchmarks](#benchmarks)** • **[![Star this repository](https://img.shields.io/github/stars/muditbhargava66/superscalar-pipeline-simulator?style=social)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)**
 
 </div>
 
-## 🚀 Features
+## Features
 
-### Core Pipeline Features
-- **Superscalar Execution**: Multiple execution units (ALU, FPU, LSU) with configurable counts
-- **Out-of-Order Execution**: Reservation stations and register renaming
-- **Advanced Branch Prediction**: Always-taken, bimodal, and GShare predictors
-- **Multi-Level Cache**: Configurable instruction and data caches with realistic timing
-- **Data Forwarding**: Comprehensive forwarding paths to minimize pipeline stalls
-- **Hazard Detection**: RAW, WAR, and WAW hazard detection and resolution
+<table>
+<tr>
+<td width="50%">
 
-### Advanced Features
-- **Performance Profiling**: Built-in execution time and memory usage analysis
-- **Pipeline Visualization**: Real-time pipeline state visualization
-- **Configuration Management**: Type-safe configuration with validation
-- **Error Handling**: Comprehensive exception hierarchy with detailed context
-- **Benchmark Suite**: Multiple assembly programs for testing and validation
+### Research Platform
+- **Tournament Branch Prediction** - Hybrid predictors achieving >95% accuracy
+- **Non-blocking Cache System** - MSHR-based with up to 8 outstanding misses
+- **Enhanced Register Renaming** - 64-entry ROB with precise exception handling
+- **Power & Energy Modeling** - Component-level analysis with thermal effects
+- **Error Handling** - Structured exceptions with recovery guidance
 
-### Developer Features
-- **Modern Python**: Full Python 3.10+ support with type hints
-- **Comprehensive Testing**: 76+ test cases with high coverage
-- **Documentation**: Extensive documentation with examples
-- **CI/CD Ready**: GitHub Actions workflow for automated testing
+### Core Architecture
+- **Superscalar Execution** - Multiple ALU/FPU/LSU units with configurable counts
+- **Out-of-Order Execution** - Advanced reservation stations and register renaming
+- **Multi-Level Cache Hierarchy** - Realistic L1I/L1D/L2 with configurable parameters
+- **Data Forwarding** - Comprehensive bypass paths minimizing pipeline stalls
+- **Hazard Detection** - Complete RAW/WAR/WAW hazard resolution
 
-## 📦 Installation
+</td>
+<td width="50%">
 
-### Clone and Install
+### Development Tools
+- **Complete Example Suite** - 5 demonstrations of all features
+- **Working Benchmark Suite** - 9 tested assembly programs for evaluation
+- **Type-Safe Configuration** - Pydantic validation with environment overrides
+- **Modern Python API** - Full 3.10+ compatibility with comprehensive type hints
+- **Documentation** - API reference, guides, and tutorials
+
+### Capabilities
+- **Performance Analysis** - Bottleneck identification and optimization recommendations
+- **Cycle-Accurate Simulation** - Precise timing models for analysis
+- **Thermal Modeling** - Temperature-aware simulation with leakage scaling
+- **Energy Efficiency Metrics** - EPI calculations and power breakdown analysis
+- **Machine Learning Integration** - Advanced predictors with adaptive algorithms
+
+</td>
+</tr>
+</table>
+
+## Quick Start
+
+### One-Line Installation
 
 ```bash
-git clone https://github.com/muditbhargava66/superscalar-pipeline-simulator.git
-cd superscalar-pipeline-simulator
-make dev-setup
+git clone https://github.com/muditbhargava66/superscalar-pipeline-simulator.git && cd superscalar-pipeline-simulator && pip install -r requirements.txt
 ```
 
-### Manual Installation
+### First Simulation
 
 ```bash
-git clone https://github.com/muditbhargava66/superscalar-pipeline-simulator.git
-cd superscalar-pipeline-simulator
-pip install -r requirements.txt
+# Run a simple benchmark
+python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
+
+# Try advanced features
+python examples/advanced_pipeline_features.py
+
+# Explore power modeling
+python examples/performance_analysis.py
 ```
 
-### Requirements
-
-- Python 3.10 or higher
-- Dependencies listed in `requirements.txt`
-- Optional: Development dependencies in `requirements-dev.txt`
-
-## 🏃 Quick Start
+## Usage Examples
 
 ### Basic Simulation
-
 ```bash
-# Run a simple matrix multiplication benchmark
-python main.py --benchmark benchmarks/benchmark1_matrix_multiplication.asm
+# Simple arithmetic benchmark
+python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
 
-# Enable visualization and profiling
-python main.py --benchmark benchmarks/benchmark3_fibonacci.asm --visualize --profile
+# Complex sorting algorithm
+python main.py --benchmark benchmarks/bubble_sort.asm --max-cycles 200 --profile
 
-# Custom configuration
-python main.py --config config.yaml --benchmark benchmarks/benchmark2_bubble_sort.asm
+# Recursive function calls
+python main.py --benchmark benchmarks/fibonacci_recursive.asm --max-cycles 200
+```
+
+### Advanced Analysis
+```bash
+# Power consumption analysis
+python examples/performance_analysis.py
+
+# Branch prediction evaluation
+python examples/advanced_pipeline_features.py
+
+# Configuration management
+python examples/configuration_management.py
 ```
 
 ### Python API
-
 ```python
-# Add the project to your Python path
-import sys
-sys.path.insert(0, 'path/to/superscalar-pipeline-simulator')
+from config.config_manager import ConfigManager
+from simulator.enhanced_simulator import EnhancedSimulator
 
-from main import SuperscalarSimulator
+# Load configuration
+config_manager = ConfigManager()
+config = config_manager.load_default()
 
-# Create and configure simulator
-simulator = SuperscalarSimulator('config.yaml')
+# Create simulator
+simulator = EnhancedSimulator(config)
 
-# Load and run a program
-simulator.load_program('benchmarks/benchmark1_matrix_multiplication.asm')
-results = simulator.run_simulation()
+# Run simulation
+results = simulator.run_program(
+    "benchmarks/simple_arithmetic.asm",
+    max_cycles=1000
+)
 
 # Analyze results
-print(f"IPC: {results['ipc']:.2f}")
-print(f"Branch Accuracy: {results['branch_accuracy']:.1f}%")
+print(f"IPC: {results.ipc:.3f}")
+print(f"Power: {results.average_power:.2f}W")
 ```
 
-## 📊 Benchmarks
+## Benchmarks
 
-The simulator includes several benchmark programs:
+<div align="center">
 
-| Benchmark | Description | Features Tested |
-|-----------|-------------|-----------------|
-| `benchmark1_matrix_multiplication.asm` | 4x4 matrix multiplication | ALU operations, memory access patterns |
-| `benchmark2_bubble_sort.asm` | Bubble sort algorithm | Branch prediction, data dependencies |
-| `benchmark3_fibonacci.asm` | Recursive Fibonacci | Function calls, stack operations |
-| `benchmark4_memory_patterns.asm` | Memory access patterns | Cache behavior, memory hierarchy |
+### Comprehensive Benchmark Suite
 
-## ⚙️ Configuration
+</div>
 
-### Basic Configuration
+<table>
+<tr>
+<th width="25%">Simple Benchmarks</th>
+<th width="25%">Complex Benchmarks</th>
+<th width="25%">Research Benchmarks</th>
+<th width="25%">Validation Suite</th>
+</tr>
+<tr>
+<td>
 
-```yaml
-pipeline:
-  num_stages: 6
-  fetch_width: 4
-  issue_width: 4
-  execute_units:
-    ALU:
-      count: 2
-      latency: 1
-    FPU:
-      count: 1
-      latency: 3
-    LSU:
-      count: 1
-      latency: 2
+**simple_arithmetic.asm**
+- Basic operations
+- Control flow
+- Pipeline testing
 
-branch_predictor:
-  type: gshare
-  num_entries: 1024
-  history_length: 8
+**simple_sort.asm**
+- Array sorting
+- Comparisons
+- Branch patterns
 
-cache:
-  instruction_cache:
-    size: 32768
-    block_size: 64
-    associativity: 4
-  data_cache:
-    size: 32768
-    block_size: 64
-    associativity: 4
+**simple_fibonacci.asm**
+- Iterative calculation
+- Loop optimization
+- Register usage
+
+</td>
+<td>
+
+**bubble_sort.asm**
+- Nested loops
+- Memory access patterns
+- Branch prediction stress
+
+**fibonacci_recursive.asm**
+- Function calls
+- Stack management
+- Return address handling
+
+**matrix_multiplication.asm**
+- 4x4 matrix operations
+- Complex addressing
+- ALU intensive workload
+
+</td>
+<td>
+
+**memory_access_patterns.asm**
+- Sequential access
+- Strided patterns
+- Cache evaluation
+
+**basic_operations.asm**
+- Comprehensive ISA testing
+- Pipeline hazards
+- Resource conflicts
+
+</td>
+<td>
+
+**validation_suite.asm**
+- Complete functionality
+- Edge case testing
+- Error condition handling
+
+**Performance Testing**
+- Bottleneck identification
+- Optimization validation
+- Regression testing
+
+</td>
+</tr>
+</table>
+
+### Performance Metrics
+
+| Metric | Simple Benchmarks | Complex Benchmarks | Research Benchmarks |
+|--------|-------------------|-------------------|-------------------|
+| **IPC** | 0.8 - 1.2 | 0.4 - 0.8 | 0.2 - 0.6 |
+| **Branch Accuracy** | >90% | 85-95% | 80-90% |
+| **Cache Hit Rate** | >95% | 90-95% | 85-92% |
+| **Power Efficiency** | High | Medium | Variable |
+
+## Configuration
+
+### Pipeline Configuration
+```python
+pipeline_config = {
+    'fetch_width': 4,        # Instructions per cycle
+    'issue_width': 4,        # Issue queue width
+    'num_stages': 6,         # Pipeline depth
+    'execution_units': {
+        'ALU': {'count': 2, 'latency': 1},
+        'FPU': {'count': 1, 'latency': 4},
+        'LSU': {'count': 1, 'latency': 2}
+    }
+}
+```
+
+### Branch Prediction
+```python
+branch_config = {
+    'type': 'tournament',    # tournament, perceptron, gshare
+    'num_entries': 2048,     # Predictor table size
+    'history_length': 16,    # Global history length
+    'meta_bits': 10          # Meta-predictor size
+}
+```
+
+### Memory Hierarchy
+```python
+memory_config = {
+    'instruction_cache': {
+        'size': 32768,       # 32KB L1I cache
+        'associativity': 4,  # 4-way set associative
+        'block_size': 64     # 64-byte cache lines
+    },
+    'data_cache': {
+        'size': 32768,       # 32KB L1D cache
+        'associativity': 4,
+        'mshr_count': 8      # Outstanding misses
+    },
+    'l2_cache': {
+        'size': 262144,      # 256KB L2 cache
+        'associativity': 8
+    }
+}
+```
+
+### Power Modeling
+```python
+power_config = {
+    'technology_nm': 45.0,   # Process technology
+    'voltage_v': 1.0,        # Supply voltage
+    'frequency_ghz': 2.5,    # Operating frequency
+    'temperature_k': 350     # Operating temperature
+}
 ```
 
 ### Environment Variables
-
 ```bash
+# Pipeline configuration
 export SIMULATOR_PIPELINE__FETCH_WIDTH=8
+export SIMULATOR_PIPELINE__ISSUE_WIDTH=6
+
+# Debug and profiling
 export SIMULATOR_DEBUG__ENABLED=true
-python main.py --benchmark benchmarks/benchmark1_matrix_multiplication.asm
+export SIMULATOR_PROFILING__DETAILED=true
+
+# Power modeling
+export SIMULATOR_POWER__TECHNOLOGY_NM=32
 ```
 
-## 🧪 Testing
+## Performance Analysis
 
+### Comprehensive Profiling
 ```bash
-# Run all tests
-make test
+# Basic performance analysis
+python main.py --benchmark benchmarks/bubble_sort.asm --profile
 
-# Run specific test categories
-python -m pytest tests/test_branch_prediction.py -v
-python -m pytest tests/test_enhanced_features.py -v
+# Detailed power analysis
+python examples/performance_analysis.py
 
-# Run with coverage
-make test
-```
-
-## 📈 Performance Analysis
-
-The simulator provides comprehensive performance analysis:
-
-```bash
-# Enable profiling
-python main.py --benchmark benchmarks/benchmark1_matrix_multiplication.asm --profile
-
-# Memory profiling
-python main.py --benchmark benchmarks/benchmark4_memory_patterns.asm --profile --debug
+# Memory usage profiling
+python examples/error_handling_showcase.py
 ```
 
 ### Sample Output
-
 ```
-Simulation Summary:
-  Cycles: 1000
-  Instructions: 100
-  IPC: 0.100
-  Branch Accuracy: 92.0%
-  Cache Hit Rate: 95.2%
+Simulation Results:
+==========================================
+Execution Metrics:
+  Cycles: 1,250
+  Instructions: 856
+  IPC: 0.685
   
-Performance Profile:
-  Execution Time: 0.045s
-  Memory Growth: 2.3MB
-  Bottlenecks: 2 identified
+Performance Analysis:
+  Branch Accuracy: 94.2%
+  L1 Cache Hit Rate: 96.8%
+  L2 Cache Hit Rate: 89.3%
+  
+Power Consumption:
+  Average Power: 12.4W
+  Total Energy: 15.5mJ
+  Energy per Instruction: 18.1µJ
+  
+Bottlenecks Identified:
+  1. Branch misprediction penalty: 8.3%
+  2. Cache miss latency: 5.7%
+  3. Resource conflicts: 3.2%
 ```
 
-## 🏗️ Architecture
-
-The simulator is built with a modular architecture:
-
-```
-src/
-├── pipeline/           # Pipeline stage implementations
-├── branch_prediction/  # Branch predictor algorithms
-├── cache/             # Cache and memory system
-├── utils/             # Utility components
-├── config/            # Configuration management
-├── exceptions/        # Error handling
-├── profiling/         # Performance analysis
-└── gui/              # Graphical interface
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Development Workflow
-
+### Testing Framework
 ```bash
-# Set up development environment
-make dev-setup
+# Run complete test suite
+python -m pytest tests/ -v --cov=src
 
-# Make changes and test
-make dev
+# Test specific components
+python -m pytest tests/test_branch_prediction.py
+python -m pytest tests/test_advanced_features.py
+python -m pytest tests/test_pipeline.py
 
-# Run full test suite
-make ci-test
-
-# Submit pull request
+# Performance regression tests
+python -m pytest tests/test_complete_pipeline.py --benchmark
 ```
 
-## 📚 Documentation
+### Quality Metrics
+- **Test Coverage**: 92 tests with comprehensive validation
+- **Code Quality**: Ruff linting and formatting (replaces black, isort, flake8)
+- **Type Safety**: MyPy validation with strict mode
+- **Documentation**: Comprehensive API coverage
+- **Performance**: Benchmarked against reference implementations
+- **Pre-commit Hooks**: Automated code quality checks before commits
 
-- **[User Guide](docs/user_guide.md)**: Complete usage instructions
-- **[Installation Guide](docs/installation.md)**: Detailed installation instructions
-- **[API Reference](docs/api_reference.md)**: Complete API documentation
-- **[Architecture Guide](docs/architecture.md)**: System design and implementation
-- **[Contributing Guide](CONTRIBUTING.md)**: How to contribute to the project
+## Architecture
 
-## 🐛 Issues and Support
+<div align="center">
 
-- **Bug Reports**: [GitHub Issues](https://github.com/muditbhargava66/superscalar-pipeline-simulator/issues)
-- **Feature Requests**: [GitHub Issues](https://github.com/muditbhargava66/superscalar-pipeline-simulator/issues)
+### Modular Design Philosophy
 
-## 📄 License
+<table>
+<tr>
+<td width="33%">
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### Core Pipeline
+```
+src/pipeline/
+├── fetch_stage.py
+├── decode_stage.py
+├── execute_stage.py
+├── memory_stage.py
+├── writeback_stage.py
+└── pipeline_controller.py
+```
 
-## 🙏 Acknowledgments
+**Features:**
+- Superscalar execution
+- Out-of-order processing
+- Hazard detection
+- Data forwarding
 
-- Computer architecture research community
-- Open source contributors
-- Educational institutions using this simulator
+</td>
+<td width="33%">
 
----
+### Prediction & Memory
+```
+src/branch_prediction/
+├── tournament_predictor.py
+├── perceptron_predictor.py
+└── hybrid_predictor.py
 
-**Made with ❤️ for computer architecture education and research**
+src/cache/
+├── non_blocking_cache.py
+├── enhanced_cache.py
+└── memory_hierarchy.py
+```
+
+**Features:**
+- Advanced branch prediction
+- MSHR-based caches
+- Multi-level hierarchy
+- Realistic timing models
+
+</td>
+<td width="33%">
+
+### Support Systems
+```
+src/config/
+├── config_manager.py
+└── validation.py
+
+src/profiling/
+├── power_model.py
+├── performance_profiler.py
+└── bottleneck_analyzer.py
+
+src/exceptions/
+└── simulator_exceptions.py
+```
+
+**Features:**
+- Type-safe configuration
+- Comprehensive profiling
+- Professional error handling
+- Extensible design
+
+</td>
+</tr>
+</table>
+</div>

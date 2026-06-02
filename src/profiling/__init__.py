@@ -1,11 +1,12 @@
 """
-Performance profiling and analysis tools for the Superscalar Pipeline Simulator.
+Enhanced performance profiling and analysis tools for the Superscalar Pipeline Simulator.
 
 This module provides comprehensive profiling capabilities including:
 - Execution time profiling
 - Memory usage analysis
 - Performance bottleneck identification
 - Comparative analysis tools
+- Power and energy modeling
 """
 
 from .benchmark_runner import BenchmarkConfig, BenchmarkRunner
@@ -15,12 +16,15 @@ from .performance_profiler import (
     PerformanceProfiler,
     ProfileResult,
 )
+from .power_model import ComponentPowerModel, ProcessorPowerModel
 
 __all__ = [
-    'PerformanceProfiler',
-    'ProfileResult',
-    'BottleneckAnalyzer',
-    'MemoryProfiler',
-    'BenchmarkRunner',
-    'BenchmarkConfig',
+    "BenchmarkConfig",
+    "BenchmarkRunner",
+    "BottleneckAnalyzer",
+    "ComponentPowerModel",
+    "MemoryProfiler",
+    "PerformanceProfiler",
+    "ProcessorPowerModel",
+    "ProfileResult",
 ]

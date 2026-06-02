@@ -9,22 +9,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Set, Type, Union
 
 
 class InstructionType(Enum):
     """Enumeration of instruction types."""
+
     ARITHMETIC = "arithmetic"
     LOGICAL = "logical"
+    COMPARISON = "comparison"
+    LOAD = "load"
+    STORE = "store"
     MEMORY = "memory"
     BRANCH = "branch"
     JUMP = "jump"
-    FLOAT = "float"
+    FLOATING_POINT = "floating_point"
+    FLOAT = "float"  # Legacy compatibility
+    SYSTEM = "system"
     NOP = "nop"
 
 
 class InstructionStatus(Enum):
     """Enumeration of instruction pipeline states."""
+
     FETCHED = "fetched"
     DECODED = "decoded"
     ISSUED = "issued"
@@ -38,7 +45,7 @@ class InstructionStatus(Enum):
 class Instruction:
     """
     Represents a processor instruction with all necessary metadata.
-    
+
     Attributes:
         address: Memory address of the instruction
         opcode: Operation code (e.g., "ADD", "LW", "BEQ")
@@ -54,14 +61,15 @@ class Instruction:
 
     address: int
     opcode: str
-    operands: List[Union[str, int]] = field(default_factory=list)
-    destination: Optional[str] = None
-    instruction_type: Optional[InstructionType] = None
+    operands: list[Union[str, int]] = field(default_factory=list)
+    destination: str | None = None
+    instruction_type: InstructionType | None = None
     status: InstructionStatus = InstructionStatus.FETCHED
-    issue_cycle: Optional[int] = None
-    completion_cycle: Optional[int] = None
-    result: Optional[Any] = None
-    prediction_info: Dict[str, Any] = field(default_factory=dict)
+    issue_cycle: int | None = None
+    completion_cycle: int | None = None
+    result: Any | None = None
+    prediction_info: dict[str, Any] = field(default_factory=dict)
+    latency: int = 1  # Default latency of 1 cycle
 
     def __post_init__(self) -> None:
         """Initialize instruction type based on opcode if not provided."""
@@ -101,23 +109,44 @@ class Instruction:
         """Parse destination register from operands based on instruction format."""
         if self.is_r_type() and len(self.operands) >= 3:
             # R-type: op rd, rs1, rs2
-            self.destination = self.operands[0]
+            self.destination = self.operands[0]  # type: ignore[assignment]
         elif self.is_i_type() and len(self.operands) >= 2:
             # I-type: op rd, rs1, imm
-            self.destination = self.operands[0]
+            self.destination = self.operands[0]  # type: ignore[assignment]
         elif self.opcode.upper() in ["JAL", "JALR"] and len(self.operands) >= 1:
             # Jump and link saves return address
             self.destination = "$ra"  # Return address register
 
     def is_r_type(self) -> bool:
         """Check if this is an R-type instruction (register-register)."""
-        return self.opcode.upper() in ["ADD", "SUB", "MUL", "DIV", "AND", "OR", "XOR", "SLT",
-                                       "FADD", "FSUB", "FMUL", "FDIV"]
+        return self.opcode.upper() in [
+            "ADD",
+            "SUB",
+            "MUL",
+            "DIV",
+            "AND",
+            "OR",
+            "XOR",
+            "SLT",
+            "FADD",
+            "FSUB",
+            "FMUL",
+            "FDIV",
+        ]
 
     def is_i_type(self) -> bool:
         """Check if this is an I-type instruction (register-immediate)."""
-        return self.opcode.upper() in ["ADDI", "SUBI", "ANDI", "ORI", "XORI", "SLTI",
-                                       "LW", "LB", "LH"]
+        return self.opcode.upper() in [
+            "ADDI",
+            "SUBI",
+            "ANDI",
+            "ORI",
+            "XORI",
+            "SLTI",
+            "LW",
+            "LB",
+            "LH",
+        ]
 
     def is_s_type(self) -> bool:
         """Check if this is an S-type instruction (store)."""
@@ -164,11 +193,11 @@ class Instruction:
         # Store and branch instructions don't have destinations
         return not (self.is_store() or self.is_branch())
 
-    def get_destination_register(self) -> Optional[str]:
+    def get_destination_register(self) -> str | None:
         """Get the destination register name."""
         return self.destination
 
-    def get_source_registers(self) -> List[str]:
+    def get_source_registers(self) -> list[str]:
         """Get list of source register names."""
         sources = []
 
@@ -186,17 +215,17 @@ class Instruction:
                 # Parse both source registers
                 sources.append(self.operands[0])  # Value to store
                 # Parse base register from offset(base) format
-                if isinstance(self.operands[1], str) and '(' in self.operands[1]:
-                    base_reg = self.operands[1].split('(')[1].rstrip(')')
+                if isinstance(self.operands[1], str) and "(" in self.operands[1]:
+                    base_reg = self.operands[1].split("(")[1].rstrip(")")
                     sources.append(base_reg)
         elif self.is_conditional_branch():
             # Branch: rs1, rs2, target
             if len(self.operands) >= 2:
                 sources.extend([self.operands[0], self.operands[1]])
 
-        return sources
+        return sources  # type: ignore[return-value]
 
-    def get_memory_address(self) -> Optional[int]:
+    def get_memory_address(self) -> int | None:
         """Get memory address for load/store instructions."""
         if not self.is_memory_operation():
             return None
@@ -209,13 +238,13 @@ class Instruction:
 
         return None
 
-    def is_taken(self, register_file) -> bool:
+    def is_taken(self, register_file: Any) -> bool:
         """
         Determine if a branch instruction is taken.
-        
+
         Args:
             register_file: Register file to read register values
-            
+
         Returns:
             True if branch is taken, False otherwise
         """
@@ -249,15 +278,39 @@ class Instruction:
     def get_latency(self) -> int:
         """Get expected execution latency for this instruction."""
         latency_map = {
-            "ADD": 1, "SUB": 1, "ADDI": 1, "SUBI": 1,
-            "AND": 1, "OR": 1, "XOR": 1, "SLT": 1,
-            "ANDI": 1, "ORI": 1, "XORI": 1, "SLTI": 1,
-            "MUL": 3, "DIV": 10,
-            "FADD": 3, "FSUB": 3, "FMUL": 5, "FDIV": 15,
-            "LW": 2, "SW": 2, "LB": 2, "LH": 2, "SB": 2, "SH": 2,
-            "BEQ": 1, "BNE": 1, "BLT": 1, "BGE": 1,
-            "J": 1, "JAL": 1, "JR": 1, "JALR": 1,
-            "NOP": 1
+            "ADD": 1,
+            "SUB": 1,
+            "ADDI": 1,
+            "SUBI": 1,
+            "AND": 1,
+            "OR": 1,
+            "XOR": 1,
+            "SLT": 1,
+            "ANDI": 1,
+            "ORI": 1,
+            "XORI": 1,
+            "SLTI": 1,
+            "MUL": 3,
+            "DIV": 10,
+            "FADD": 3,
+            "FSUB": 3,
+            "FMUL": 5,
+            "FDIV": 15,
+            "LW": 2,
+            "SW": 2,
+            "LB": 2,
+            "LH": 2,
+            "SB": 2,
+            "SH": 2,
+            "BEQ": 1,
+            "BNE": 1,
+            "BLT": 1,
+            "BGE": 1,
+            "J": 1,
+            "JAL": 1,
+            "JR": 1,
+            "JALR": 1,
+            "NOP": 1,
         }
         return latency_map.get(self.opcode.upper(), 1)
 
@@ -276,13 +329,13 @@ class Instruction:
 class BranchInstruction(Instruction):
     """
     Specialized instruction class for branch instructions.
-    
+
     Adds branch-specific attributes and methods.
     """
 
     pc: int = 0  # Alias for address
-    condition: Optional[bool] = None  # For conditional branches
-    target_address: Optional[int] = None
+    condition: bool | None = None  # For conditional branches
+    target_address: int | None = None
 
     def __post_init__(self) -> None:
         """Initialize branch instruction."""
@@ -301,11 +354,11 @@ class BranchInstruction(Instruction):
         # Calculate target address if not set
         if self.target_address is None and len(self.operands) >= 1:
             try:
-                if self.opcode.upper() in ['J', 'JAL']:
+                if self.opcode.upper() in ["J", "JAL"]:
                     # Jump instructions: operand is absolute address
                     target_str = self.operands[0]
-                    if target_str.startswith('0x'):
-                        self.target_address = int(target_str, 16)
+                    if target_str.startswith("0x"):  # type: ignore[union-attr]
+                        self.target_address = int(target_str, 16)  # type: ignore[arg-type]
                     else:
                         self.target_address = int(target_str)
                 elif len(self.operands) >= 3:
@@ -315,7 +368,7 @@ class BranchInstruction(Instruction):
             except (ValueError, IndexError):
                 pass
 
-    def get_target_address(self) -> Optional[int]:
+    def get_target_address(self) -> int | None:
         """Get the target address for this branch."""
         return self.target_address
 
@@ -325,10 +378,10 @@ class InstructionBundle:
     Represents a bundle of instructions fetched together in superscalar execution.
     """
 
-    def __init__(self, instructions: List[Instruction], fetch_cycle: int) -> None:
+    def __init__(self, instructions: list[Instruction], fetch_cycle: int) -> None:
         """
         Initialize instruction bundle.
-        
+
         Args:
             instructions: List of instructions in the bundle
             fetch_cycle: Cycle when bundle was fetched
@@ -341,7 +394,7 @@ class InstructionBundle:
         """Check if bundle contains a branch instruction."""
         return any(inst.is_branch() for inst in self.instructions)
 
-    def get_branch_instruction(self) -> Optional[Instruction]:
+    def get_branch_instruction(self) -> Instruction | None:
         """Get the first branch instruction in the bundle."""
         for inst in self.instructions:
             if inst.is_branch():
@@ -352,10 +405,10 @@ class InstructionBundle:
         """Check if bundle contains memory operations."""
         return any(inst.is_memory_operation() for inst in self.instructions)
 
-    def get_dependencies(self) -> List[tuple[int, int]]:
+    def get_dependencies(self) -> list[tuple[int, int]]:
         """
         Get RAW dependencies within the bundle.
-        
+
         Returns:
             List of (producer_idx, consumer_idx) tuples
         """

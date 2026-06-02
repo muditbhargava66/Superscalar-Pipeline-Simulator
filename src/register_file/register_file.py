@@ -8,13 +8,13 @@ supporting MIPS-style register naming and access.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Union
+from typing import Any, List, Mapping, Optional, Union
 
 
 class RegisterFile:
     """
     Register file for the processor.
-    
+
     Supports:
     - 32 general-purpose registers (MIPS-style)
     - Named register access ($zero, $t0, etc.)
@@ -24,47 +24,79 @@ class RegisterFile:
 
     # MIPS register name mappings
     REGISTER_NAMES = {
-        '$zero': 0, '$0': 0,      # Always zero
-        '$at': 1, '$1': 1,        # Assembler temporary
-        '$v0': 2, '$2': 2,        # Return values
-        '$v1': 3, '$3': 3,
-        '$a0': 4, '$4': 4,        # Arguments
-        '$a1': 5, '$5': 5,
-        '$a2': 6, '$6': 6,
-        '$a3': 7, '$7': 7,
-        '$t0': 8, '$8': 8,        # Temporaries
-        '$t1': 9, '$9': 9,
-        '$t2': 10, '$10': 10,
-        '$t3': 11, '$11': 11,
-        '$t4': 12, '$12': 12,
-        '$t5': 13, '$13': 13,
-        '$t6': 14, '$14': 14,
-        '$t7': 15, '$15': 15,
-        '$s0': 16, '$16': 16,     # Saved registers
-        '$s1': 17, '$17': 17,
-        '$s2': 18, '$18': 18,
-        '$s3': 19, '$19': 19,
-        '$s4': 20, '$20': 20,
-        '$s5': 21, '$21': 21,
-        '$s6': 22, '$22': 22,
-        '$s7': 23, '$23': 23,
-        '$t8': 24, '$24': 24,     # More temporaries
-        '$t9': 25, '$25': 25,
-        '$k0': 26, '$26': 26,     # Kernel reserved
-        '$k1': 27, '$27': 27,
-        '$gp': 28, '$28': 28,     # Global pointer
-        '$sp': 29, '$29': 29,     # Stack pointer
-        '$fp': 30, '$30': 30,     # Frame pointer
-        '$s8': 30,                # Alternative name for $fp
-        '$ra': 31, '$31': 31      # Return address
+        "$zero": 0,
+        "$0": 0,  # Always zero
+        "$at": 1,
+        "$1": 1,  # Assembler temporary
+        "$v0": 2,
+        "$2": 2,  # Return values
+        "$v1": 3,
+        "$3": 3,
+        "$a0": 4,
+        "$4": 4,  # Arguments
+        "$a1": 5,
+        "$5": 5,
+        "$a2": 6,
+        "$6": 6,
+        "$a3": 7,
+        "$7": 7,
+        "$t0": 8,
+        "$8": 8,  # Temporaries
+        "$t1": 9,
+        "$9": 9,
+        "$t2": 10,
+        "$10": 10,
+        "$t3": 11,
+        "$11": 11,
+        "$t4": 12,
+        "$12": 12,
+        "$t5": 13,
+        "$13": 13,
+        "$t6": 14,
+        "$14": 14,
+        "$t7": 15,
+        "$15": 15,
+        "$s0": 16,
+        "$16": 16,  # Saved registers
+        "$s1": 17,
+        "$17": 17,
+        "$s2": 18,
+        "$18": 18,
+        "$s3": 19,
+        "$19": 19,
+        "$s4": 20,
+        "$20": 20,
+        "$s5": 21,
+        "$21": 21,
+        "$s6": 22,
+        "$22": 22,
+        "$s7": 23,
+        "$23": 23,
+        "$t8": 24,
+        "$24": 24,  # More temporaries
+        "$t9": 25,
+        "$25": 25,
+        "$k0": 26,
+        "$26": 26,  # Kernel reserved
+        "$k1": 27,
+        "$27": 27,
+        "$gp": 28,
+        "$28": 28,  # Global pointer
+        "$sp": 29,
+        "$29": 29,  # Stack pointer
+        "$fp": 30,
+        "$30": 30,  # Frame pointer
+        "$s8": 30,  # Alternative name for $fp
+        "$ra": 31,
+        "$31": 31,  # Return address
     }
 
-    def __init__(self, num_registers: int = 32,
-                 num_read_ports: int = 4,
-                 num_write_ports: int = 2) -> None:
+    def __init__(
+        self, num_registers: int = 32, num_read_ports: int = 4, num_write_ports: int = 2
+    ) -> None:
         """
         Initialize the register file.
-        
+
         Args:
             num_registers: Number of registers (default 32 for MIPS)
             num_read_ports: Number of simultaneous read ports
@@ -75,13 +107,13 @@ class RegisterFile:
         self.num_write_ports = num_write_ports
 
         # Initialize registers
-        self.registers: List[int] = [0] * num_registers
+        self.registers: list[int] = [0] * num_registers
 
         # Register locks for preventing hazards
-        self.register_locks: List[bool] = [False] * num_registers
+        self.register_locks: list[bool] = [False] * num_registers
 
         # Pending writes (for write port arbitration)
-        self.pending_writes: List[tuple] = []
+        self.pending_writes: list[tuple] = []
 
         # Statistics
         self.read_count = 0
@@ -91,8 +123,10 @@ class RegisterFile:
         # Initialize special registers
         self._initialize_special_registers()
 
-        logging.debug(f"Initialized Register File with {num_registers} registers, "
-                     f"{num_read_ports} read ports, {num_write_ports} write ports")
+        logging.debug(
+            f"Initialized Register File with {num_registers} registers, "
+            f"{num_read_ports} read ports, {num_write_ports} write ports"
+        )
 
     def _initialize_special_registers(self) -> None:
         """Initialize special registers with default values."""
@@ -107,13 +141,13 @@ class RegisterFile:
     def _resolve_register(self, register: Union[str, int]) -> int:
         """
         Resolve register identifier to register number.
-        
+
         Args:
             register: Register name or number
-            
+
         Returns:
             Register number (0-31)
-            
+
         Raises:
             ValueError: If register is invalid
         """
@@ -129,7 +163,7 @@ class RegisterFile:
                 return self.REGISTER_NAMES[register]
 
             # Try r<N> format
-            if register.startswith('r') and register[1:].isdigit():
+            if register.startswith("r") and register[1:].isdigit():
                 reg_num = int(register[1:])
                 if 0 <= reg_num < self.num_registers:
                     return reg_num
@@ -148,10 +182,10 @@ class RegisterFile:
     def read_register(self, register: Union[str, int]) -> int:
         """
         Read value from a register.
-        
+
         Args:
             register: Register identifier (name or number)
-            
+
         Returns:
             Register value
         """
@@ -164,14 +198,16 @@ class RegisterFile:
         self.read_count += 1
         value = self.registers[reg_num]
 
-        logging.debug(f"Read R{reg_num} ({self._get_register_name(reg_num)}) = {value:#x}")
+        logging.debug(
+            f"Read R{reg_num} ({self._get_register_name(reg_num)}) = {value:#x}"
+        )
 
         return value
 
     def write_register(self, register: Union[str, int], value: Any) -> None:
         """
         Write value to a register.
-        
+
         Args:
             register: Register identifier (name or number)
             value: Value to write
@@ -201,42 +237,48 @@ class RegisterFile:
         old_value = self.registers[reg_num]
         self.registers[reg_num] = value & 0xFFFFFFFF  # 32-bit register
 
-        logging.debug(f"Write R{reg_num} ({self._get_register_name(reg_num)}) = "
-                     f"{value:#x} (was {old_value:#x})")
+        logging.debug(
+            f"Write R{reg_num} ({self._get_register_name(reg_num)}) = "
+            f"{value:#x} (was {old_value:#x})"
+        )
 
-    def read_multiple(self, registers: List[Union[str, int]]) -> List[int]:
+    def read_multiple(self, registers: list[Union[str, int]]) -> list[int]:
         """
         Read multiple registers (simulating multiple read ports).
-        
+
         Args:
             registers: List of register identifiers
-            
+
         Returns:
             List of register values
-            
+
         Raises:
             ValueError: If too many simultaneous reads requested
         """
         if len(registers) > self.num_read_ports:
-            raise ValueError(f"Too many simultaneous reads: {len(registers)} > {self.num_read_ports}")
+            raise ValueError(
+                f"Too many simultaneous reads: {len(registers)} > {self.num_read_ports}"
+            )
 
         return [self.read_register(reg) for reg in registers]
 
-    def write_multiple(self, writes: List[Tuple[Union[str, int], Any]]) -> None:
+    def write_multiple(self, writes: list[tuple[Union[str, int], Any]]) -> None:
         """
         Write multiple registers (simulating multiple write ports).
-        
+
         Args:
             writes: List of (register, value) tuples
-            
+
         Raises:
             ValueError: If too many simultaneous writes requested
         """
         if len(writes) > self.num_write_ports:
             self.port_conflicts += 1
             # Only process up to num_write_ports writes
-            writes = writes[:self.num_write_ports]
-            logging.warning(f"Write port conflict: only processing {self.num_write_ports} writes")
+            writes = writes[: self.num_write_ports]
+            logging.warning(
+                f"Write port conflict: only processing {self.num_write_ports} writes"
+            )
 
         for register, value in writes:
             self.write_register(register, value)
@@ -269,17 +311,17 @@ class RegisterFile:
         """Get the canonical name for a register number."""
         # Reverse lookup in REGISTER_NAMES
         for name, num in self.REGISTER_NAMES.items():
-            if num == reg_num and not name.startswith('$') and name[1:].isdigit():
+            if num == reg_num and not name.startswith("$") and name[1:].isdigit():
                 continue  # Skip numeric aliases
             if num == reg_num:
                 return name
 
         return f"r{reg_num}"
 
-    def get_all_registers(self) -> Dict[str, int]:
+    def get_all_registers(self) -> dict[str, int]:
         """
         Get all register values as a dictionary.
-        
+
         Returns:
             Dictionary mapping register names to values
         """
@@ -293,10 +335,10 @@ class RegisterFile:
     def dump_registers(self, only_nonzero: bool = True) -> str:
         """
         Get a formatted dump of register contents.
-        
+
         Args:
             only_nonzero: Only show non-zero registers
-            
+
         Returns:
             Formatted register dump string
         """
@@ -321,17 +363,17 @@ class RegisterFile:
 
         return "\n".join(lines)
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get register file statistics."""
         non_zero_regs = sum(1 for v in self.registers[1:] if v != 0)  # Exclude $zero
 
         return {
-            'read_count': self.read_count,
-            'write_count': self.write_count,
-            'port_conflicts': self.port_conflicts,
-            'non_zero_registers': non_zero_regs,
-            'locked_registers': sum(self.register_locks),
-            'pending_writes': len(self.pending_writes)
+            "read_count": self.read_count,
+            "write_count": self.write_count,
+            "port_conflicts": self.port_conflicts,
+            "non_zero_registers": non_zero_regs,
+            "locked_registers": sum(self.register_locks),
+            "pending_writes": len(self.pending_writes),
         }
 
     def reset(self) -> None:
@@ -350,7 +392,7 @@ class RegisterFile:
 
     def __str__(self) -> str:
         """String representation showing key registers."""
-        key_regs = ['$zero', '$v0', '$a0', '$sp', '$ra']
+        key_regs = ["$zero", "$v0", "$a0", "$sp", "$ra"]
         values = []
         for reg in key_regs:
             val = self.read_register(reg)
@@ -360,15 +402,17 @@ class RegisterFile:
 
     def __repr__(self) -> str:
         """Detailed representation."""
-        return (f"RegisterFile(registers={self.num_registers}, "
-                f"read_ports={self.num_read_ports}, "
-                f"write_ports={self.num_write_ports})")
+        return (
+            f"RegisterFile(registers={self.num_registers}, "
+            f"read_ports={self.num_read_ports}, "
+            f"write_ports={self.num_write_ports})"
+        )
 
 
 class PhysicalRegisterFile(RegisterFile):
     """
     Physical register file for register renaming support.
-    
+
     Extends basic register file with:
     - More physical registers than architectural
     - Free list management
@@ -378,7 +422,7 @@ class PhysicalRegisterFile(RegisterFile):
     def __init__(self, num_physical: int = 64, num_architectural: int = 32) -> None:
         """
         Initialize physical register file.
-        
+
         Args:
             num_physical: Total number of physical registers
             num_architectural: Number of architectural registers
@@ -389,24 +433,26 @@ class PhysicalRegisterFile(RegisterFile):
         self.num_physical = num_physical
 
         # Mapping from architectural to physical registers
-        self.mapping_table: List[int] = list(range(num_architectural))
+        self.mapping_table: list[int] = list(range(num_architectural))
 
         # Free list of physical registers
-        self.free_list: List[int] = list(range(num_architectural, num_physical))
+        self.free_list: list[int] = list(range(num_architectural, num_physical))
 
         # Reverse mapping for debugging
-        self.reverse_map: Dict[int, int] = {i: i for i in range(num_architectural)}
+        self.reverse_map: dict[int, int] = {i: i for i in range(num_architectural)}
 
-        logging.debug(f"Initialized Physical Register File: "
-                     f"{num_architectural} architectural, {num_physical} physical")
+        logging.debug(
+            f"Initialized Physical Register File: "
+            f"{num_architectural} architectural, {num_physical} physical"
+        )
 
-    def allocate_physical_register(self, arch_reg: int) -> Optional[int]:
+    def allocate_physical_register(self, arch_reg: int) -> int | None:
         """
         Allocate a physical register for an architectural register.
-        
+
         Args:
             arch_reg: Architectural register number
-            
+
         Returns:
             Physical register number or None if none available
         """
@@ -433,7 +479,7 @@ class PhysicalRegisterFile(RegisterFile):
     def free_physical_register(self, phys_reg: int) -> None:
         """
         Return a physical register to the free list.
-        
+
         Args:
             phys_reg: Physical register to free
         """
