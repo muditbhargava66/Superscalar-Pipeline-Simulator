@@ -10,13 +10,13 @@ from __future__ import annotations
 from collections import OrderedDict
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 
 class CacheBlock:
     """Represents a cache block with metadata."""
 
-    def __init__(self, tag: int, data: List[Any], valid: bool = True) -> None:
+    def __init__(self, tag: int, data: list[Any], valid: bool = True) -> None:
         self.tag = tag
         self.data = data
         self.valid = valid
@@ -33,18 +33,24 @@ class CacheBlock:
 class Cache:
     """
     Base cache implementation with configurable replacement policies.
-    
+
     Supports:
     - Direct mapped, set associative, and fully associative configurations
     - LRU, FIFO, and random replacement policies
     - Write-through and write-back policies
     """
 
-    def __init__(self, cache_size: int, block_size: int, associativity: int = 1,
-                 replacement_policy: str = 'LRU', write_policy: str = 'write_through') -> None:
+    def __init__(
+        self,
+        cache_size: int,
+        block_size: int,
+        associativity: int = 1,
+        replacement_policy: str = "LRU",
+        write_policy: str = "write_through",
+    ) -> None:
         """
         Initialize cache.
-        
+
         Args:
             cache_size: Total cache size in bytes
             block_size: Size of each cache block in bytes
@@ -65,7 +71,7 @@ class Cache:
         self.offset_bits = (block_size - 1).bit_length()
 
         # Initialize cache structure
-        self.cache: Dict[int, List[Optional[CacheBlock]]] = {}
+        self.cache: dict[int, list[CacheBlock | None]] = {}
         for i in range(self.num_sets):
             self.cache[i] = [None] * associativity
 
@@ -75,17 +81,19 @@ class Cache:
         self.evictions = 0
         self.writebacks = 0
 
-        logging.debug(f"Initialized Cache: {cache_size}B, {block_size}B blocks, "
-                     f"{associativity}-way, {replacement_policy}, {write_policy}")
+        logging.debug(
+            f"Initialized Cache: {cache_size}B, {block_size}B blocks, "
+            f"{associativity}-way, {replacement_policy}, {write_policy}"
+        )
 
-    def _parse_address(self, address: int) -> Tuple[int, int, int]:
+    def _parse_address(self, address: int) -> tuple[int, int, int]:
         """Parse address into tag, index, and offset."""
         offset = address & ((1 << self.offset_bits) - 1)
         index = (address >> self.offset_bits) & ((1 << self.index_bits) - 1)
         tag = address >> (self.offset_bits + self.index_bits)
         return tag, index, offset
 
-    def _find_block(self, tag: int, index: int) -> Optional[Tuple[int, CacheBlock]]:
+    def _find_block(self, tag: int, index: int) -> tuple[int, CacheBlock] | None:
         """Find block in cache set."""
         cache_set = self.cache[index]
         for way, block in enumerate(cache_set):
@@ -103,37 +111,38 @@ class Cache:
                 return way
 
         # All blocks are valid, use replacement policy
-        if self.replacement_policy == 'LRU':
+        if self.replacement_policy == "LRU":
             # Find least recently used
             lru_way = 0
-            lru_time = cache_set[0].last_access_time
+            lru_time = cache_set[0].last_access_time  # type: ignore[union-attr]
             for way, block in enumerate(cache_set):
-                if block.last_access_time < lru_time:
-                    lru_time = block.last_access_time
+                if block.last_access_time < lru_time:  # type: ignore[union-attr]
+                    lru_time = block.last_access_time  # type: ignore[union-attr]
                     lru_way = way
             return lru_way
 
-        elif self.replacement_policy == 'FIFO':
+        elif self.replacement_policy == "FIFO":
             # Find block with lowest access count (first in)
             fifo_way = 0
-            min_count = cache_set[0].access_count
+            min_count = cache_set[0].access_count  # type: ignore[union-attr]
             for way, block in enumerate(cache_set):
-                if block.access_count < min_count:
-                    min_count = block.access_count
+                if block.access_count < min_count:  # type: ignore[union-attr]
+                    min_count = block.access_count  # type: ignore[union-attr]
                     fifo_way = way
             return fifo_way
 
         else:  # Random
             import random
+
             return random.randint(0, self.associativity - 1)
 
-    def read(self, address: int) -> Optional[Any]:
+    def read(self, address: int) -> Any | None:
         """
         Read data from cache.
-        
+
         Args:
             address: Memory address to read
-            
+
         Returns:
             Data if hit, None if miss
         """
@@ -159,11 +168,11 @@ class Cache:
     def write(self, address: int, data: Any) -> bool:
         """
         Write data to cache.
-        
+
         Args:
             address: Memory address to write
             data: Data to write
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -179,7 +188,7 @@ class Cache:
             if offset < len(block.data):
                 block.data[offset] = data
 
-                if self.write_policy == 'write_back':
+                if self.write_policy == "write_back":
                     block.dirty = True
 
                 self.hits += 1
@@ -193,7 +202,7 @@ class Cache:
         old_block = self.cache[index][way]
         if old_block and old_block.valid:
             self.evictions += 1
-            if old_block.dirty and self.write_policy == 'write_back':
+            if old_block.dirty and self.write_policy == "write_back":
                 self.writebacks += 1
                 # In real implementation, would write back to memory
 
@@ -202,13 +211,13 @@ class Cache:
         new_data[offset] = data
         new_block = CacheBlock(tag, new_data)
 
-        if self.write_policy == 'write_back':
+        if self.write_policy == "write_back":
             new_block.dirty = True
 
         self.cache[index][way] = new_block
         return True
 
-    def load_block(self, address: int, block_data: List[Any]) -> None:
+    def load_block(self, address: int, block_data: list[Any]) -> None:
         """Load a complete block into cache."""
         tag, index, offset = self._parse_address(address)
         way = self._find_replacement_way(index)
@@ -217,11 +226,11 @@ class Cache:
         old_block = self.cache[index][way]
         if old_block and old_block.valid:
             self.evictions += 1
-            if old_block.dirty and self.write_policy == 'write_back':
+            if old_block.dirty and self.write_policy == "write_back":
                 self.writebacks += 1
 
         # Load new block
-        new_block = CacheBlock(tag, block_data[:self.block_size])
+        new_block = CacheBlock(tag, block_data[: self.block_size])
         self.cache[index][way] = new_block
 
     def invalidate(self, address: int) -> None:
@@ -247,20 +256,20 @@ class Cache:
         total_accesses = self.hits + self.misses
         return (self.hits / total_accesses * 100) if total_accesses > 0 else 0.0
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get cache statistics."""
         total_accesses = self.hits + self.misses
         return {
-            'hits': self.hits,
-            'misses': self.misses,
-            'total_accesses': total_accesses,
-            'hit_rate': self.get_hit_rate(),
-            'evictions': self.evictions,
-            'writebacks': self.writebacks,
-            'cache_size': self.cache_size,
-            'block_size': self.block_size,
-            'associativity': self.associativity,
-            'num_sets': self.num_sets
+            "hits": self.hits,
+            "misses": self.misses,
+            "total_accesses": total_accesses,
+            "hit_rate": self.get_hit_rate(),
+            "evictions": self.evictions,
+            "writebacks": self.writebacks,
+            "cache_size": self.cache_size,
+            "block_size": self.block_size,
+            "associativity": self.associativity,
+            "num_sets": self.num_sets,
         }
 
     def reset_statistics(self) -> None:
@@ -270,21 +279,28 @@ class Cache:
         self.evictions = 0
         self.writebacks = 0
 
+
 class InstructionCache(Cache):
     """
     Instruction cache specialized for fetching instructions.
-    
+
     Features:
     - Instruction-specific fetch bandwidth
     - Integration with memory hierarchy
     - Prefetching support
     """
 
-    def __init__(self, cache_size: int, block_size: int, memory: Memory,
-                 fetch_bandwidth: int = 4, associativity: int = 4) -> None:
+    def __init__(
+        self,
+        cache_size: int,
+        block_size: int,
+        memory: Memory,
+        fetch_bandwidth: int = 4,
+        associativity: int = 4,
+    ) -> None:
         """
         Initialize instruction cache.
-        
+
         Args:
             cache_size: Cache size in bytes
             block_size: Block size in bytes
@@ -297,14 +313,16 @@ class InstructionCache(Cache):
         self.memory = memory
 
         # Instruction-specific storage
-        self.instruction_storage: Dict[int, Any] = {}
+        self.instruction_storage: dict[int, Any] = {}
 
         # Prefetch state
         self.prefetch_enabled = True
         self.prefetch_distance = 2  # Prefetch 2 blocks ahead
 
-        logging.debug(f"Initialized Instruction Cache: {cache_size}B, "
-                     f"fetch bandwidth: {fetch_bandwidth}")
+        logging.debug(
+            f"Initialized Instruction Cache: {cache_size}B, "
+            f"fetch bandwidth: {fetch_bandwidth}"
+        )
 
     def has_instruction(self, address: int) -> bool:
         """Check if instruction is in cache."""
@@ -317,13 +335,13 @@ class InstructionCache(Cache):
         result = self._find_block(tag, index)
         return result is not None
 
-    def get_instruction(self, address: int) -> Optional[Dict[str, Any]]:
+    def get_instruction(self, address: int) -> dict[str, Any] | None:
         """
         Get instruction from cache.
-        
+
         Args:
             address: Instruction address
-            
+
         Returns:
             Instruction data dictionary or None if miss
         """
@@ -341,10 +359,10 @@ class InstructionCache(Cache):
         self.misses += 1
         return None
 
-    def add_instruction(self, address: int, instruction_data: Dict[str, Any]) -> None:
+    def add_instruction(self, address: int, instruction_data: dict[str, Any]) -> None:
         """
         Add instruction to cache.
-        
+
         Args:
             address: Instruction address
             instruction_data: Instruction data dictionary
@@ -359,14 +377,16 @@ class InstructionCache(Cache):
         if self.prefetch_enabled:
             self._prefetch(address)
 
-    def fetch_instructions(self, start_address: int, count: int) -> List[Optional[Dict[str, Any]]]:
+    def fetch_instructions(
+        self, start_address: int, count: int
+    ) -> list[dict[str, Any] | None]:
         """
         Fetch multiple instructions starting from address.
-        
+
         Args:
             start_address: Starting address
             count: Number of instructions to fetch (limited by bandwidth)
-            
+
         Returns:
             List of instruction data dictionaries
         """
@@ -388,7 +408,7 @@ class InstructionCache(Cache):
     def _prefetch(self, address: int) -> None:
         """
         Prefetch instructions ahead of current address.
-        
+
         Args:
             address: Current instruction address
         """
@@ -407,32 +427,39 @@ class InstructionCache(Cache):
                 del self.instruction_storage[address]
             self.invalidate(address)
 
+
 class DataCache(Cache):
     """
     Data cache for load/store operations.
-    
+
     Features:
     - Load/store interface
     - Write buffer support
     - Memory coherence protocols
     """
 
-    def __init__(self, cache_size: int, block_size: int, associativity: int = 4,
-                 write_policy: str = 'write_back') -> None:
+    def __init__(
+        self,
+        cache_size: int,
+        block_size: int,
+        associativity: int = 4,
+        write_policy: str = "write_back",
+    ) -> None:
         """
         Initialize data cache.
-        
+
         Args:
             cache_size: Cache size in bytes
             block_size: Block size in bytes
             associativity: Cache associativity
             write_policy: 'write_through' or 'write_back'
         """
-        super().__init__(cache_size, block_size, associativity,
-                        write_policy=write_policy)
+        super().__init__(
+            cache_size, block_size, associativity, write_policy=write_policy
+        )
 
         # Write buffer for write-through policy
-        self.write_buffer: List[Tuple[int, Any]] = []
+        self.write_buffer: list[tuple[int, Any]] = []
         self.write_buffer_size = 8
 
         # Store buffer for write-back policy
@@ -441,13 +468,13 @@ class DataCache(Cache):
 
         logging.debug(f"Initialized Data Cache: {cache_size}B, {write_policy}")
 
-    def load(self, address: int) -> Optional[Any]:
+    def load(self, address: int) -> Any | None:
         """
         Load data from cache/memory.
-        
+
         Args:
             address: Memory address to load from
-            
+
         Returns:
             Data value or None if not found
         """
@@ -467,11 +494,11 @@ class DataCache(Cache):
     def store(self, address: int, data: Any) -> bool:
         """
         Store data to cache/memory.
-        
+
         Args:
             address: Memory address to store to
             data: Data to store
-            
+
         Returns:
             True if successful
         """
@@ -486,7 +513,7 @@ class DataCache(Cache):
         success = self.write(address, data)
 
         # Handle write buffer for write-through
-        if self.write_policy == 'write_through':
+        if self.write_policy == "write_through":
             if len(self.write_buffer) >= self.write_buffer_size:
                 # Flush oldest write
                 self.write_buffer.pop(0)
@@ -502,7 +529,7 @@ class DataCache(Cache):
 
         return self.read(address) is not None
 
-    def get_data(self, address: int) -> Optional[Any]:
+    def get_data(self, address: int) -> Any | None:
         """Get data with hit/miss tracking."""
         return self.load(address)
 
@@ -512,7 +539,7 @@ class DataCache(Cache):
 
     def flush_write_buffer(self) -> None:
         """Flush write buffer to memory."""
-        if self.write_policy == 'write_through':
+        if self.write_policy == "write_through":
             # In real implementation, would write to memory
             flushed = len(self.write_buffer)
             self.write_buffer.clear()
@@ -532,20 +559,23 @@ class DataCache(Cache):
         """Get miss count."""
         return self.misses
 
+
 class Memory:
     """
     Main memory implementation with realistic access patterns.
-    
+
     Features:
     - Configurable access latency
     - Bandwidth limitations
     - Memory access statistics
     """
 
-    def __init__(self, size: int, access_latency: int = 100, bandwidth: int = 8) -> None:
+    def __init__(
+        self, size: int, access_latency: int = 100, bandwidth: int = 8
+    ) -> None:
         """
         Initialize memory.
-        
+
         Args:
             size: Memory size in bytes
             access_latency: Access latency in cycles
@@ -563,19 +593,21 @@ class Memory:
         self.bytes_written = 0
 
         # Access queue for modeling bandwidth limits
-        self.pending_accesses: List[Tuple[str, int, int]] = []  # (type, address, size)
+        self.pending_accesses: list[tuple[str, int, int]] = []  # (type, address, size)
 
-        logging.debug(f"Initialized Memory: {size}B, {access_latency} cycle latency, "
-                     f"{bandwidth}B/cycle bandwidth")
+        logging.debug(
+            f"Initialized Memory: {size}B, {access_latency} cycle latency, "
+            f"{bandwidth}B/cycle bandwidth"
+        )
 
     def read(self, address: int, size: int = 4) -> Any:
         """
         Read data from memory.
-        
+
         Args:
             address: Starting address
             size: Number of bytes to read
-            
+
         Returns:
             Data value or list of values
         """
@@ -589,18 +621,18 @@ class Memory:
         self.bytes_read += size
 
         # Add to pending accesses (for bandwidth modeling)
-        self.pending_accesses.append(('read', address, size))
+        self.pending_accesses.append(("read", address, size))
 
         # Return data
         if size == 1:
             return self.data[address]
         else:
-            return self.data[address:address + size]
+            return self.data[address : address + size]
 
-    def write(self, address: int, data: Any, size: int = None) -> None:
+    def write(self, address: int, data: Any, size: int = None) -> None:  # type: ignore[assignment]
         """
         Write data to memory.
-        
+
         Args:
             address: Starting address
             data: Data to write (single value or list)
@@ -612,7 +644,7 @@ class Memory:
                 raise MemoryAccessError(
                     f"Memory write out of range: {address + actual_size} > {self.size}"
                 )
-            self.data[address:address + actual_size] = data
+            self.data[address : address + actual_size] = data
         else:
             actual_size = size or 4  # Default to 4 bytes
             if address + actual_size > self.size:
@@ -632,13 +664,13 @@ class Memory:
         self.bytes_written += actual_size
 
         # Add to pending accesses
-        self.pending_accesses.append(('write', address, actual_size))
+        self.pending_accesses.append(("write", address, actual_size))
 
-    def read_block(self, address: int, block_size: int) -> List[Any]:
+    def read_block(self, address: int, block_size: int) -> list[Any]:
         """Read a complete cache block."""
         return self.read(address, block_size)
 
-    def write_block(self, address: int, block_data: List[Any]) -> None:
+    def write_block(self, address: int, block_data: list[Any]) -> None:
         """Write a complete cache block."""
         self.write(address, block_data)
 
@@ -649,11 +681,11 @@ class Memory:
     def get_access_latency(self, address: int, size: int) -> int:
         """
         Calculate access latency based on size and bandwidth.
-        
+
         Args:
             address: Memory address
             size: Access size in bytes
-            
+
         Returns:
             Latency in cycles
         """
@@ -677,21 +709,23 @@ class Memory:
 
         self.pending_accesses = remaining_accesses
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get memory access statistics."""
         total_accesses = self.read_count + self.write_count
         total_bytes = self.bytes_read + self.bytes_written
 
         return {
-            'total_accesses': total_accesses,
-            'read_count': self.read_count,
-            'write_count': self.write_count,
-            'bytes_read': self.bytes_read,
-            'bytes_written': self.bytes_written,
-            'total_bytes': total_bytes,
-            'average_access_size': total_bytes / total_accesses if total_accesses > 0 else 0,
-            'pending_accesses': len(self.pending_accesses),
-            'memory_utilization': (total_bytes / self.size) * 100
+            "total_accesses": total_accesses,
+            "read_count": self.read_count,
+            "write_count": self.write_count,
+            "bytes_read": self.bytes_read,
+            "bytes_written": self.bytes_written,
+            "total_bytes": total_bytes,
+            "average_access_size": total_bytes / total_accesses
+            if total_accesses > 0
+            else 0,
+            "pending_accesses": len(self.pending_accesses),
+            "memory_utilization": (total_bytes / self.size) * 100,
         }
 
     def reset_statistics(self) -> None:
@@ -702,41 +736,47 @@ class Memory:
         self.bytes_written = 0
         self.pending_accesses.clear()
 
-    def dump_region(self, start_address: int, size: int) -> List[Any]:
+    def dump_region(self, start_address: int, size: int) -> list[Any]:
         """Dump memory region for debugging."""
         if start_address + size > self.size:
             size = self.size - start_address
 
-        return self.data[start_address:start_address + size]
+        return self.data[start_address : start_address + size]
 
-    def load_program(self, program_data: List[Any], start_address: int = 0) -> None:
+    def load_program(self, program_data: list[Any], start_address: int = 0) -> None:
         """Load program data into memory."""
         if start_address + len(program_data) > self.size:
             raise MemoryAccessError("Program too large for memory")
 
-        self.data[start_address:start_address + len(program_data)] = program_data
+        self.data[start_address : start_address + len(program_data)] = program_data
         logging.info(f"Loaded {len(program_data)} bytes at address {start_address:#x}")
 
 
 class MemoryAccessError(Exception):
     """Exception raised for memory access errors."""
+
     pass
 
 
 class MemoryHierarchy:
     """
     Complete memory hierarchy with L1, L2 caches and main memory.
-    
+
     Provides unified interface for memory operations with realistic
     latencies and bandwidth constraints.
     """
 
-    def __init__(self, memory_size: int = 1024*1024,
-                 l1_i_size: int = 32*1024, l1_d_size: int = 32*1024,
-                 l2_size: int = 256*1024, block_size: int = 64) -> None:
+    def __init__(
+        self,
+        memory_size: int = 1024 * 1024,
+        l1_i_size: int = 32 * 1024,
+        l1_d_size: int = 32 * 1024,
+        l2_size: int = 256 * 1024,
+        block_size: int = 64,
+    ) -> None:
         """
         Initialize memory hierarchy.
-        
+
         Args:
             memory_size: Main memory size
             l1_i_size: L1 instruction cache size
@@ -760,11 +800,13 @@ class MemoryHierarchy:
         self.l2_accesses = 0
         self.memory_accesses = 0
 
-        logging.info(f"Initialized Memory Hierarchy: "
-                    f"L1I={l1_i_size}B, L1D={l1_d_size}B, L2={l2_size}B, "
-                    f"Memory={memory_size}B")
+        logging.info(
+            f"Initialized Memory Hierarchy: "
+            f"L1I={l1_i_size}B, L1D={l1_d_size}B, L2={l2_size}B, "
+            f"Memory={memory_size}B"
+        )
 
-    def read_instruction(self, address: int) -> Optional[Dict[str, Any]]:
+    def read_instruction(self, address: int) -> dict[str, Any] | None:
         """Read instruction through cache hierarchy."""
         self.l1_i_accesses += 1
 
@@ -786,7 +828,7 @@ class MemoryHierarchy:
         # In real implementation, would fetch from memory
         return None
 
-    def read_data(self, address: int) -> Optional[Any]:
+    def read_data(self, address: int) -> Any | None:
         """Read data through cache hierarchy."""
         self.l1_d_accesses += 1
 
@@ -823,17 +865,17 @@ class MemoryHierarchy:
 
         return success
 
-    def get_hierarchy_statistics(self) -> Dict[str, Any]:
+    def get_hierarchy_statistics(self) -> dict[str, Any]:
         """Get complete hierarchy statistics."""
         return {
-            'l1_instruction': self.l1_i_cache.get_statistics(),
-            'l1_data': self.l1_d_cache.get_statistics(),
-            'l2_unified': self.l2_cache.get_statistics(),
-            'main_memory': self.memory.get_statistics(),
-            'access_counts': {
-                'l1_i_accesses': self.l1_i_accesses,
-                'l1_d_accesses': self.l1_d_accesses,
-                'l2_accesses': self.l2_accesses,
-                'memory_accesses': self.memory_accesses
-            }
+            "l1_instruction": self.l1_i_cache.get_statistics(),
+            "l1_data": self.l1_d_cache.get_statistics(),
+            "l2_unified": self.l2_cache.get_statistics(),
+            "main_memory": self.memory.get_statistics(),
+            "access_counts": {
+                "l1_i_accesses": self.l1_i_accesses,
+                "l1_d_accesses": self.l1_d_accesses,
+                "l2_accesses": self.l2_accesses,
+                "memory_accesses": self.memory_accesses,
+            },
         }

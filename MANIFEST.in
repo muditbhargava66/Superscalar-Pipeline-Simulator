@@ -1,10 +1,13 @@
 # Include the README and license
 include README.md
 include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
 
 # Include configuration files
 include config.yaml
 include pyproject.toml
+include .pre-commit-config.yaml
 
 # Include requirements files
 include requirements.txt
@@ -29,11 +32,8 @@ exclude pipeline_fixes.py
 exclude run_validation.py
 exclude test_benchmarks.py
 exclude test_runner.py
-exclude BENCHMARK_ANALYSIS_REPORT.md
-exclude COMPLETION_SUMMARY.md
-exclude ENHANCED_FEATURES.md
-exclude FINAL_STATUS_REPORT.md
-exclude FIXES_SUMMARY.md
+
+# Exclude report files (development artifacts)
 exclude simulation_results.txt
 exclude benchmark_validation_results.json
 
@@ -44,3 +44,8 @@ global-exclude .DS_Store
 global-exclude *.so
 global-exclude .coverage
 global-exclude htmlcov
+global-exclude .pytest_cache
+global-exclude .ruff_cache
+global-exclude .mypy_cache
+global-exclude coverage.xml
+global-exclude coverage.html

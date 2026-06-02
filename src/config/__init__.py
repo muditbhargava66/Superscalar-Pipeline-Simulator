@@ -16,11 +16,11 @@ from .config_models import (
 )
 
 __all__ = [
-    'SimulatorConfig',
-    'PipelineConfig',
-    'BranchPredictorConfig',
-    'CacheConfig',
-    'SimulationConfig',
-    'DebugConfig',
-    'ConfigManager',
+    "BranchPredictorConfig",
+    "CacheConfig",
+    "ConfigManager",
+    "DebugConfig",
+    "PipelineConfig",
+    "SimulationConfig",
+    "SimulatorConfig",
 ]

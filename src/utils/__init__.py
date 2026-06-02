@@ -11,14 +11,14 @@ from .reservation_station import ReservationStation, ReservationStationPool
 from .scoreboard import Scoreboard
 
 __all__ = [
-    'Instruction',
-    'BranchInstruction',
-    'InstructionBundle',
-    'Scoreboard',
-    'ReservationStation',
-    'ReservationStationPool',
-    'FunctionalUnit',
-    'ALU',
-    'FPU',
-    'LSU'
+    "ALU",
+    "FPU",
+    "LSU",
+    "BranchInstruction",
+    "FunctionalUnit",
+    "Instruction",
+    "InstructionBundle",
+    "ReservationStation",
+    "ReservationStationPool",
+    "Scoreboard",
 ]

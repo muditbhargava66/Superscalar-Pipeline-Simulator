@@ -141,7 +141,7 @@ After installation, verify everything works:
 
 ```bash
 # Test basic import
-python -c "import src.main; print('Installation successful!')"
+python -c "from src.main import main; print('Installation successful!')"
 
 # Run basic tests
 python -m pytest tests/test_complete_pipeline.py::TestInstruction -v
@@ -150,7 +150,31 @@ python -m pytest tests/test_complete_pipeline.py::TestInstruction -v
 python src/gui/config_gui.py
 
 # Run a simple simulation
-python src/main.py --config config.yaml --benchmark benchmarks/benchmark1_fixed.asm
+python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 50
+
+# Test examples
+python examples/basic_simulation.py
+```
+
+### Code Quality Tools Setup
+
+For development, setup the code quality tools:
+
+```bash
+# Setup pre-commit hooks (recommended)
+pre-commit install
+
+# Manual linting check
+ruff check src/ tests/
+
+# Manual formatting check
+ruff format --check src/ tests/
+
+# Type checking
+mypy src/ --ignore-missing-imports
+
+# Run all pre-commit hooks
+pre-commit run --all-files
 ```
 
 ## Troubleshooting
@@ -195,7 +219,7 @@ python src/main.py --config config.yaml --benchmark benchmarks/benchmark1_fixed.
 
 If you encounter issues:
 
-1. Check the [troubleshooting section](troubleshooting.md)
+1. Check common issues below
 2. Search existing [GitHub issues](https://github.com/muditbhargava66/superscalar-pipeline-simulator/issues)
 3. Create a new issue with:
    - Your operating system and Python version
@@ -219,17 +243,20 @@ source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements-dev.txt
 pip install -e .
 
-# Setup pre-commit hooks
+# Setup pre-commit hooks (runs linting/formatting before each commit)
 pre-commit install
 
 # Run tests to verify setup
 python -m pytest tests/ -v
 
 # Run linting
-python -m ruff check src/
+ruff check src/ tests/
+
+# Run formatting
+ruff format src/ tests/
 
 # Run type checking
-python -m mypy src/
+mypy src/ --ignore-missing-imports
 ```
 
 ## Next Steps
