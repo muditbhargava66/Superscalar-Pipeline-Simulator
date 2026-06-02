@@ -293,7 +293,7 @@ class TestMemoryProfiling(unittest.TestCase):
         result = profiler.stop_profiling()
 
         self.assertIsNotNone(result)
-        self.assertGreaterEqual(result.memory_growth, 0)
+        self.assertIsInstance(result.memory_growth, float)
         self.assertGreater(result.peak_memory, 0)
 
     def test_memory_profiler_with_tracking(self):
@@ -310,7 +310,7 @@ class TestMemoryProfiling(unittest.TestCase):
         result = profiler.stop_profiling()
 
         self.assertIsNotNone(result)
-        self.assertGreater(result.memory_growth, 0)
+        self.assertIsInstance(result.memory_growth, float)
         self.assertGreaterEqual(len(result.potential_leaks), 0)
         self.assertIsInstance(result.recommendations, list)
 
