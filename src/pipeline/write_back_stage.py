@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any, Optional
+from typing import Any, List, Optional, Tuple, Type
 
 # Handle imports for both package and direct execution
 try:
@@ -18,6 +18,7 @@ try:
 except (ImportError, ValueError):
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from register_file.register_file import RegisterFile
     from utils.instruction import Instruction
@@ -26,7 +27,7 @@ except (ImportError, ValueError):
 class WriteBackStage:
     """
     Write-back stage of the pipeline.
-    
+
     Responsible for:
     - Writing results to destination registers
     - Updating architectural state
@@ -37,7 +38,7 @@ class WriteBackStage:
     def __init__(self, register_file: RegisterFile, num_write_ports: int = 2) -> None:
         """
         Initialize the write-back stage.
-        
+
         Args:
             register_file: Reference to the register file
             num_write_ports: Number of write ports available
@@ -51,17 +52,21 @@ class WriteBackStage:
         # Performance counters
         self.writeback_count = 0
         self.write_port_conflicts = 0
-        self.completed_instructions = []
+        self.completed_instructions = []  # type: ignore[var-annotated]
 
-        logging.debug(f"Initialized Write-Back Stage with {num_write_ports} write ports")
+        logging.debug(
+            f"Initialized Write-Back Stage with {num_write_ports} write ports"
+        )
 
-    def write_back(self, memory_results: List[Tuple[Instruction, Any]]) -> List[Instruction]:
+    def write_back(
+        self, memory_results: List[Tuple[Instruction, Any]]
+    ) -> List[Instruction]:
         """
         Write instruction results back to register file.
-        
+
         Args:
             memory_results: List of (instruction, result) tuples from memory stage
-            
+
         Returns:
             List of completed instructions
         """
@@ -89,12 +94,14 @@ class WriteBackStage:
                         self.register_file.write_register(destination_register, result)
                         writes_this_cycle += 1
 
-                        logging.debug(f"Write-back: {destination_register} = {result} "
-                                    f"(from {instruction.opcode})")
+                        logging.debug(
+                            f"Write-back: {destination_register} = {result} "
+                            f"(from {instruction.opcode})"
+                        )
 
                 # Mark instruction as completed
                 instruction.status = "completed"
-                instruction.completion_cycle = getattr(self, 'current_cycle', 0)
+                instruction.completion_cycle = getattr(self, "current_cycle", 0)
 
                 completed.append(instruction)
                 self.completed_instructions.append(instruction)
@@ -112,7 +119,7 @@ class WriteBackStage:
     def handle_exceptions(self, instruction: Instruction, exception_type: str) -> None:
         """
         Handle exceptions during write-back.
-        
+
         Args:
             instruction: Instruction that caused exception
             exception_type: Type of exception
@@ -127,7 +134,7 @@ class WriteBackStage:
     def get_write_port_utilization(self) -> float:
         """
         Calculate write port utilization.
-        
+
         Returns:
             Utilization percentage
         """
@@ -135,16 +142,18 @@ class WriteBackStage:
             return 0.0
 
         # Average writes per cycle when writing
-        avg_writes = self.writeback_count / max(1, self.writeback_count - self.write_port_conflicts)
+        avg_writes = self.writeback_count / max(
+            1, self.writeback_count - self.write_port_conflicts
+        )
         return (avg_writes / self.num_write_ports) * 100
 
     def get_statistics(self) -> dict:
         """Get write-back stage statistics."""
         return {
-            'completed_instructions': self.writeback_count,
-            'write_port_conflicts': self.write_port_conflicts,
-            'write_port_utilization': self.get_write_port_utilization(),
-            'average_latency': self._calculate_average_latency()
+            "completed_instructions": self.writeback_count,
+            "write_port_conflicts": self.write_port_conflicts,
+            "write_port_utilization": self.get_write_port_utilization(),
+            "average_latency": self._calculate_average_latency(),
         }
 
     def _calculate_average_latency(self) -> float:
@@ -156,7 +165,7 @@ class WriteBackStage:
         count = 0
 
         for inst in self.completed_instructions:
-            if hasattr(inst, 'issue_cycle') and hasattr(inst, 'completion_cycle'):
+            if hasattr(inst, "issue_cycle") and hasattr(inst, "completion_cycle"):
                 latency = inst.completion_cycle - inst.issue_cycle
                 total_latency += latency
                 count += 1
@@ -175,7 +184,7 @@ class WriteBackStage:
 class ReorderBuffer:
     """
     Reorder buffer for out-of-order execution with in-order commit.
-    
+
     Ensures instructions complete in program order despite
     out-of-order execution.
     """
@@ -183,25 +192,25 @@ class ReorderBuffer:
     def __init__(self, size: int = 64) -> None:
         """
         Initialize reorder buffer.
-        
+
         Args:
             size: Number of entries in the reorder buffer
         """
         self.size = size
-        self.buffer: List[Optional[ROBEntry]] = [None] * size
+        self.buffer: List[ROBEntry | None] = [None] * size
         self.head = 0  # Oldest instruction (commit point)
         self.tail = 0  # Newest instruction (allocation point)
         self.count = 0
 
         logging.debug(f"Initialized Reorder Buffer with {size} entries")
 
-    def allocate(self, instruction: Instruction) -> Optional[int]:
+    def allocate(self, instruction: Instruction) -> int | None:
         """
         Allocate a ROB entry for an instruction.
-        
+
         Args:
             instruction: Instruction to allocate entry for
-            
+
         Returns:
             ROB index or None if full
         """
@@ -211,10 +220,7 @@ class ReorderBuffer:
         # Allocate at tail
         rob_id = self.tail
         self.buffer[rob_id] = ROBEntry(
-            instruction=instruction,
-            ready=False,
-            exception=None,
-            result=None
+            instruction=instruction, ready=False, exception=None, result=None
         )
 
         # Update tail and count
@@ -231,24 +237,24 @@ class ReorderBuffer:
     def mark_ready(self, rob_id: int, result: Any = None) -> None:
         """
         Mark a ROB entry as ready to commit.
-        
+
         Args:
             rob_id: ROB entry index
             result: Instruction result
         """
         if self.buffer[rob_id] is not None:
-            self.buffer[rob_id].ready = True
-            self.buffer[rob_id].result = result
+            self.buffer[rob_id].ready = True  # type: ignore[union-attr]
+            self.buffer[rob_id].result = result  # type: ignore[union-attr]
 
             logging.debug(f"ROB entry {rob_id} marked ready")
 
     def commit(self, register_file: RegisterFile) -> List[Instruction]:
         """
         Commit ready instructions in program order.
-        
+
         Args:
             register_file: Register file to update
-            
+
         Returns:
             List of committed instructions
         """
@@ -258,22 +264,22 @@ class ReorderBuffer:
         while self.count > 0 and self.buffer[self.head] is not None:
             entry = self.buffer[self.head]
 
-            if not entry.ready:
+            if not entry.ready:  # type: ignore[union-attr]
                 # Cannot commit yet - wait for instruction to complete
                 break
 
-            if entry.exception:
+            if entry.exception:  # type: ignore[union-attr]
                 # Handle exception
-                logging.warning(f"Exception at commit: {entry.exception}")
+                logging.warning(f"Exception at commit: {entry.exception}")  # type: ignore[union-attr]
                 # In real processor, would trigger exception handler
 
             # Commit the instruction
-            instruction = entry.instruction
+            instruction = entry.instruction  # type: ignore[union-attr]
 
             if instruction.has_destination_register():
                 dest_reg = instruction.get_destination_register()
-                if dest_reg and entry.result is not None:
-                    register_file.write_register(dest_reg, entry.result)
+                if dest_reg and entry.result is not None:  # type: ignore[union-attr]
+                    register_file.write_register(dest_reg, entry.result)  # type: ignore[union-attr]
 
             committed.append(instruction)
 
@@ -289,7 +295,7 @@ class ReorderBuffer:
     def flush(self, starting_from: int) -> None:
         """
         Flush ROB entries (for misprediction recovery).
-        
+
         Args:
             starting_from: ROB index to start flushing from
         """
@@ -325,29 +331,33 @@ class ReorderBuffer:
 @dataclass
 class ROBEntry:
     """Entry in the reorder buffer."""
+
     instruction: Instruction
     ready: bool = False
-    exception: Optional[str] = None
-    result: Optional[Any] = None
-    completion_cycle: Optional[int] = None
+    exception: str | None = None
+    result: Any | None = None
+    completion_cycle: int | None = None
 
 
 class AdvancedWriteBackStage(WriteBackStage):
     """
     Enhanced write-back stage with reorder buffer support.
-    
+
     Provides:
     - Out-of-order execution with in-order commit
     - Precise exception handling
     - Speculative execution support
     """
 
-    def __init__(self, register_file: RegisterFile,
-                 rob_size: int = 64, num_write_ports: int = 2) -> None:
+    def __init__(
+        self, register_file: RegisterFile, rob_size: int = 64, num_write_ports: int = 2
+    ) -> None:
         super().__init__(register_file, num_write_ports)
         self.rob = ReorderBuffer(rob_size)
 
-    def write_back(self, memory_results: List[Tuple[Instruction, Any]]) -> List[Instruction]:
+    def write_back(
+        self, memory_results: List[Tuple[Instruction, Any]]
+    ) -> List[Instruction]:
         """
         Mark instructions as ready in ROB instead of immediately writing back.
         """
@@ -356,7 +366,7 @@ class AdvancedWriteBackStage(WriteBackStage):
             if instruction is None:
                 continue
 
-            if hasattr(instruction, 'rob_id'):
+            if hasattr(instruction, "rob_id"):
                 self.rob.mark_ready(instruction.rob_id, result)
                 logging.debug(f"Marked {instruction} ready in ROB")
 
@@ -372,10 +382,10 @@ class AdvancedWriteBackStage(WriteBackStage):
     def allocate_rob_entry(self, instruction: Instruction) -> bool:
         """
         Allocate a ROB entry for an instruction.
-        
+
         Args:
             instruction: Instruction to allocate entry for
-            
+
         Returns:
             True if allocation successful, False if ROB full
         """
@@ -385,23 +395,27 @@ class AdvancedWriteBackStage(WriteBackStage):
     def handle_misprediction(self, mispredicted_instruction: Instruction) -> None:
         """
         Handle branch misprediction by flushing ROB.
-        
+
         Args:
             mispredicted_instruction: The mispredicted branch
         """
-        if hasattr(mispredicted_instruction, 'rob_id'):
+        if hasattr(mispredicted_instruction, "rob_id"):
             # Flush all instructions after the mispredicted branch
             flush_point = (mispredicted_instruction.rob_id + 1) % self.rob.size
             self.rob.flush(flush_point)
 
-            logging.info(f"Flushed ROB due to misprediction at {mispredicted_instruction}")
+            logging.info(
+                f"Flushed ROB due to misprediction at {mispredicted_instruction}"
+            )
 
     def get_statistics(self) -> dict:
         """Get enhanced statistics including ROB information."""
         stats = super().get_statistics()
-        stats.update({
-            'rob_occupancy': self.rob.get_occupancy(),
-            'rob_size': self.rob.size,
-            'rob_entries_used': self.rob.count
-        })
+        stats.update(
+            {
+                "rob_occupancy": self.rob.get_occupancy(),
+                "rob_size": self.rob.size,
+                "rob_entries_used": self.rob.count,
+            }
+        )
         return stats

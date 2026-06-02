@@ -7,4 +7,4 @@ caused by data hazards through bypassing mechanisms.
 
 from .data_forwarding_unit import DataForwardingUnit
 
-__all__ = ['DataForwardingUnit']
+__all__ = ["DataForwardingUnit"]

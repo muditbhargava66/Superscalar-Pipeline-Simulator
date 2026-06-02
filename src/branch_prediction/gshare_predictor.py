@@ -8,17 +8,17 @@ global branch history XORed with the PC to index into a pattern history table.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Dict, List, Optional
 
 
 class GsharePredictor:
     """
     Gshare branch predictor using global history and PC XOR indexing.
-    
+
     The gshare predictor maintains a global history register that tracks
     the outcome of recent branches, and uses this history XORed with the
     branch PC to index into a pattern history table of 2-bit saturating counters.
-    
+
     Attributes:
         num_entries: Number of entries in the pattern history table
         history_length: Number of bits in the global history register
@@ -29,7 +29,7 @@ class GsharePredictor:
     def __init__(self, num_entries: int = 1024, history_length: int = 8) -> None:
         """
         Initialize the gshare predictor.
-        
+
         Args:
             num_entries: Number of entries in the pattern history table (power of 2)
             history_length: Number of bits in the global history register
@@ -48,26 +48,30 @@ class GsharePredictor:
         self.total_mispredictions = 0
         self.branch_history: List[Dict] = []  # For debugging/analysis
 
-        logging.debug(f"Initialized Gshare predictor with {num_entries} entries, "
-                     f"{history_length}-bit history")
+        logging.debug(
+            f"Initialized Gshare predictor with {num_entries} entries, "
+            f"{history_length}-bit history"
+        )
 
-    def predict(self, instruction) -> Optional[int]:
+    def predict(self, instruction) -> int | None:
         """
         Predict the outcome of a branch instruction.
-        
+
         Args:
             instruction: The branch instruction (with PC address)
-            
+
         Returns:
             Predicted target PC if branch taken, None if not taken
         """
         # Handle both Instruction objects and raw PC values
-        if hasattr(instruction, 'address'):
+        if hasattr(instruction, "address"):
             pc = instruction.address
         elif isinstance(instruction, int):
             pc = instruction
         else:
-            logging.error(f"Invalid instruction type for prediction: {type(instruction)}")
+            logging.error(
+                f"Invalid instruction type for prediction: {type(instruction)}"
+            )
             return None
 
         # Get index into pattern history table
@@ -82,17 +86,19 @@ class GsharePredictor:
         self.total_predictions += 1
 
         # Calculate predicted PC
-        if hasattr(instruction, 'is_branch') and instruction.is_branch():
+        if hasattr(instruction, "is_branch") and instruction.is_branch():
             if prediction_taken:
                 # For branch instructions, return target address
-                if hasattr(instruction, 'operands') and len(instruction.operands) >= 3:
+                if hasattr(instruction, "operands") and len(instruction.operands) >= 3:
                     # Conditional branches: beq/bne have target as 3rd operand
                     try:
                         target_offset = int(instruction.operands[2])
                         return pc + 4 + (target_offset * 4)  # PC-relative addressing
                     except (ValueError, IndexError):
                         return pc + 4  # Default to next instruction
-                elif hasattr(instruction, 'operands') and len(instruction.operands) >= 1:
+                elif (
+                    hasattr(instruction, "operands") and len(instruction.operands) >= 1
+                ):
                     # Unconditional jumps: j/jal have absolute target
                     try:
                         return int(instruction.operands[0])
@@ -105,13 +111,13 @@ class GsharePredictor:
     def update(self, instruction, actual_taken: bool) -> None:
         """
         Update the predictor with the actual branch outcome.
-        
+
         Args:
             instruction: The branch instruction (with PC address)
             actual_taken: Whether the branch was actually taken
         """
         # Handle both Instruction objects and raw PC values
-        if hasattr(instruction, 'address'):
+        if hasattr(instruction, "address"):
             pc = instruction.address
         elif isinstance(instruction, int):
             pc = instruction
@@ -137,30 +143,36 @@ class GsharePredictor:
             self.pattern_history_table[index] = max(counter - 1, 0)
 
         # Update global history register
-        self.history_register = ((self.history_register << 1) | (1 if actual_taken else 0)) & ((1 << self.history_length) - 1)
+        self.history_register = (
+            (self.history_register << 1) | (1 if actual_taken else 0)
+        ) & ((1 << self.history_length) - 1)
 
         # Record for analysis
-        self.branch_history.append({
-            'pc': pc,
-            'predicted': predicted_taken,
-            'actual': actual_taken,
-            'counter_before': counter,
-            'counter_after': self.pattern_history_table[index],
-            'history': self.history_register
-        })
+        self.branch_history.append(
+            {
+                "pc": pc,
+                "predicted": predicted_taken,
+                "actual": actual_taken,
+                "counter_before": counter,
+                "counter_after": self.pattern_history_table[index],
+                "history": self.history_register,
+            }
+        )
 
-        logging.debug(f"Updated branch at PC {pc}: predicted={predicted_taken}, "
-                     f"actual={actual_taken}, counter={counter}->{self.pattern_history_table[index]}")
+        logging.debug(
+            f"Updated branch at PC {pc}: predicted={predicted_taken}, "
+            f"actual={actual_taken}, counter={counter}->{self.pattern_history_table[index]}"
+        )
 
     def _get_index(self, pc: int) -> int:
         """
         Calculate the index into the pattern history table.
-        
+
         Uses XOR of PC bits and global history register.
-        
+
         Args:
             pc: Program counter value
-            
+
         Returns:
             Index into the pattern history table
         """
@@ -184,7 +196,7 @@ class GsharePredictor:
     def get_accuracy(self) -> float:
         """
         Calculate the prediction accuracy.
-        
+
         Returns:
             Accuracy as a percentage (0-100)
         """
@@ -194,10 +206,10 @@ class GsharePredictor:
         correct_predictions = self.total_predictions - self.total_mispredictions
         return (correct_predictions / self.total_predictions) * 100.0
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """
         Get comprehensive statistics about the predictor.
-        
+
         Returns:
             Dictionary containing various statistics
         """
@@ -207,12 +219,16 @@ class GsharePredictor:
             counter_distribution[counter] += 1
 
         return {
-            'total_predictions': self.total_predictions,
-            'total_mispredictions': self.total_mispredictions,
-            'accuracy': self.get_accuracy(),
-            'history_register': bin(self.history_register),
-            'counter_distribution': counter_distribution,
-            'table_utilization': len(set(self.branch_history[-1000:])) / self.num_entries * 100 if self.branch_history else 0
+            "total_predictions": self.total_predictions,
+            "total_mispredictions": self.total_mispredictions,
+            "accuracy": self.get_accuracy(),
+            "history_register": bin(self.history_register),
+            "counter_distribution": counter_distribution,
+            "table_utilization": len(set(self.branch_history[-1000:]))
+            / self.num_entries
+            * 100
+            if self.branch_history
+            else 0,
         }
 
     def reset(self) -> None:
@@ -227,15 +243,17 @@ class GsharePredictor:
 
     def __repr__(self) -> str:
         """String representation of the predictor."""
-        return (f"GsharePredictor(entries={self.num_entries}, "
-                f"history_bits={self.history_length}, "
-                f"accuracy={self.get_accuracy():.1f}%)")
+        return (
+            f"GsharePredictor(entries={self.num_entries}, "
+            f"history_bits={self.history_length}, "
+            f"accuracy={self.get_accuracy():.1f}%)"
+        )
 
 
 class EnhancedGsharePredictor(GsharePredictor):
     """
     Enhanced gshare predictor with additional features.
-    
+
     Adds:
     - Per-branch statistics tracking
     - Adaptive history length
@@ -244,7 +262,7 @@ class EnhancedGsharePredictor(GsharePredictor):
 
     def __init__(self, num_entries: int = 1024, history_length: int = 8) -> None:
         super().__init__(num_entries, history_length)
-        self.per_branch_stats: Dict[int, Dict] = {}
+        self.per_branch_stats: dict[int, Dict] = {}
         self.confidence_threshold = 0.9
 
     def update(self, instruction, actual_taken: bool) -> None:
@@ -252,33 +270,33 @@ class EnhancedGsharePredictor(GsharePredictor):
         super().update(instruction, actual_taken)
 
         # Track per-branch statistics
-        pc = instruction.address if hasattr(instruction, 'address') else instruction
+        pc = instruction.address if hasattr(instruction, "address") else instruction
         if pc not in self.per_branch_stats:
             self.per_branch_stats[pc] = {
-                'taken_count': 0,
-                'not_taken_count': 0,
-                'mispredictions': 0
+                "taken_count": 0,
+                "not_taken_count": 0,
+                "mispredictions": 0,
             }
 
         stats = self.per_branch_stats[pc]
         if actual_taken:
-            stats['taken_count'] += 1
+            stats["taken_count"] += 1
         else:
-            stats['not_taken_count'] += 1
+            stats["not_taken_count"] += 1
 
         # Check if mispredicted
         index = self._get_index(pc)
         predicted_taken = self.pattern_history_table[index] >= 2
         if predicted_taken != actual_taken:
-            stats['mispredictions'] += 1
+            stats["mispredictions"] += 1
 
-    def get_branch_bias(self, pc: int) -> Optional[float]:
+    def get_branch_bias(self, pc: int) -> float | None:
         """
         Get the bias (taken probability) for a specific branch.
-        
+
         Args:
             pc: Program counter of the branch
-            
+
         Returns:
             Taken probability (0-1) or None if no history
         """
@@ -286,19 +304,19 @@ class EnhancedGsharePredictor(GsharePredictor):
             return None
 
         stats = self.per_branch_stats[pc]
-        total = stats['taken_count'] + stats['not_taken_count']
+        total = stats["taken_count"] + stats["not_taken_count"]
         if total == 0:
             return None
 
-        return stats['taken_count'] / total
+        return stats["taken_count"] / total
 
     def is_high_confidence(self, pc: int) -> bool:
         """
         Check if prediction for this branch is high confidence.
-        
+
         Args:
             pc: Program counter of the branch
-            
+
         Returns:
             True if high confidence prediction
         """
@@ -307,4 +325,6 @@ class EnhancedGsharePredictor(GsharePredictor):
             return False
 
         # High confidence if strongly biased
-        return bias > self.confidence_threshold or bias < (1 - self.confidence_threshold)
+        return bias > self.confidence_threshold or bias < (
+            1 - self.confidence_threshold
+        )

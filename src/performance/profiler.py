@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Dict, List, Tuple, Type
 
 
 @dataclass
@@ -75,23 +75,33 @@ class PerformanceMetrics:
 
         # Branch accuracy
         if self.branch_predictions > 0:
-            self.branch_accuracy = ((self.branch_predictions - self.branch_mispredictions)
-                                   / self.branch_predictions * 100)
+            self.branch_accuracy = (
+                (self.branch_predictions - self.branch_mispredictions)
+                / self.branch_predictions
+                * 100
+            )
 
         # Cache hit rates
         if self.icache_hits + self.icache_misses > 0:
-            self.icache_hit_rate = self.icache_hits / (self.icache_hits + self.icache_misses) * 100
+            self.icache_hit_rate = (
+                self.icache_hits / (self.icache_hits + self.icache_misses) * 100
+            )
 
         if self.dcache_hits + self.dcache_misses > 0:
-            self.dcache_hit_rate = self.dcache_hits / (self.dcache_hits + self.dcache_misses) * 100
+            self.dcache_hit_rate = (
+                self.dcache_hits / (self.dcache_hits + self.dcache_misses) * 100
+            )
 
         # Total stalls
-        self.total_stalls = self.data_stalls + self.structural_stalls + self.control_stalls
+        self.total_stalls = (
+            self.data_stalls + self.structural_stalls + self.control_stalls
+        )
 
 
 @dataclass
 class CycleSnapshot:
     """Detailed information about a single cycle."""
+
     cycle: int
     fetched_instructions: List[str] = field(default_factory=list)
     decoded_instructions: List[str] = field(default_factory=list)
@@ -99,7 +109,7 @@ class CycleSnapshot:
     executed_instructions: List[str] = field(default_factory=list)
     memory_instructions: List[str] = field(default_factory=list)
     writeback_instructions: List[str] = field(default_factory=list)
-    stalls: Dict[str, int] = field(default_factory=dict)
+    stalls: dict[str, int] = field(default_factory=dict)
     hazards: List[str] = field(default_factory=list)
     branch_predictions: List[Tuple[str, bool]] = field(default_factory=list)
     cache_accesses: List[Tuple[str, bool]] = field(default_factory=list)
@@ -108,7 +118,7 @@ class CycleSnapshot:
 class PerformanceProfiler:
     """
     Comprehensive performance profiler for the pipeline simulator.
-    
+
     Tracks detailed metrics, identifies bottlenecks, and provides
     analysis and recommendations.
     """
@@ -116,7 +126,7 @@ class PerformanceProfiler:
     def __init__(self, enable_detailed_tracking: bool = False) -> None:
         """
         Initialize the performance profiler.
-        
+
         Args:
             enable_detailed_tracking: Whether to track per-cycle details
         """
@@ -133,8 +143,8 @@ class PerformanceProfiler:
         self.cache_hit_history: deque = deque(maxlen=1000)
 
         # Instruction tracking
-        self.instruction_latencies: Dict[str, List[int]] = defaultdict(list)
-        self.instruction_counts: Dict[str, int] = defaultdict(int)
+        self.instruction_latencies: dict[str, List[int]] = defaultdict(list)
+        self.instruction_counts: dict[str, int] = defaultdict(int)
 
         # Bottleneck analysis
         self.bottleneck_events: List[Dict] = []
@@ -164,8 +174,9 @@ class PerformanceProfiler:
         if self.enable_detailed_tracking and self.cycle_snapshots:
             self.cycle_snapshots[-1].fetched_instructions.extend(instructions)
 
-    def record_instruction_complete(self, instruction: str,
-                                  issue_cycle: int, complete_cycle: int) -> None:
+    def record_instruction_complete(
+        self, instruction: str, issue_cycle: int, complete_cycle: int
+    ) -> None:
         """Record instruction completion with latency."""
         self.metrics.total_instructions += 1
 
@@ -179,7 +190,7 @@ class PerformanceProfiler:
 
     def _update_instruction_mix(self, instruction: str) -> None:
         """Update instruction type counters."""
-        opcode = instruction.split()[0].upper() if instruction else ""
+        opcode = instruction.split(maxsplit=1)[0].upper() if instruction else ""
 
         if opcode in ["ADD", "SUB", "MUL", "DIV", "ADDI", "SUBI"]:
             self.metrics.arithmetic_instructions += 1
@@ -192,8 +203,9 @@ class PerformanceProfiler:
         elif opcode in ["FADD", "FSUB", "FMUL", "FDIV"]:
             self.metrics.floating_point_instructions += 1
 
-    def record_branch_prediction(self, instruction: str,
-                               predicted: bool, actual: bool) -> None:
+    def record_branch_prediction(
+        self, instruction: str, predicted: bool, actual: bool
+    ) -> None:
         """Record branch prediction outcome."""
         self.metrics.branch_predictions += 1
         if predicted != actual:
@@ -207,12 +219,16 @@ class PerformanceProfiler:
 
         # Update history
         if self.metrics.branch_predictions > 0:
-            accuracy = ((self.metrics.branch_predictions - self.metrics.branch_mispredictions)
-                       / self.metrics.branch_predictions * 100)
+            accuracy = (
+                (self.metrics.branch_predictions - self.metrics.branch_mispredictions)
+                / self.metrics.branch_predictions
+                * 100
+            )
             self.branch_accuracy_history.append(accuracy)
 
-    def record_cache_access(self, cache_type: str, hit: bool,
-                           miss_penalty: int = 10) -> None:
+    def record_cache_access(
+        self, cache_type: str, hit: bool, miss_penalty: int = 10
+    ) -> None:
         """Record cache access."""
         if cache_type == "instruction":
             if hit:
@@ -255,8 +271,9 @@ class PerformanceProfiler:
         if self.enable_detailed_tracking and self.cycle_snapshots:
             self.cycle_snapshots[-1].hazards.append(f"{hazard_type}: {description}")
 
-    def record_functional_unit_usage(self, unit_type: str,
-                                   busy_cycles: int, total_cycles: int) -> None:
+    def record_functional_unit_usage(
+        self, unit_type: str, busy_cycles: int, total_cycles: int
+    ) -> None:
         """Record functional unit utilization."""
         if total_cycles == 0:
             return
@@ -272,16 +289,18 @@ class PerformanceProfiler:
 
     def identify_bottleneck(self, description: str, severity: str = "medium") -> None:
         """Record a performance bottleneck."""
-        self.bottleneck_events.append({
-            'cycle': self.current_cycle,
-            'description': description,
-            'severity': severity,
-            'metrics_snapshot': {
-                'ipc': self.metrics.ipc,
-                'stalls': self.metrics.total_stalls,
-                'branch_accuracy': self.metrics.branch_accuracy
+        self.bottleneck_events.append(
+            {
+                "cycle": self.current_cycle,
+                "description": description,
+                "severity": severity,
+                "metrics_snapshot": {
+                    "ipc": self.metrics.ipc,
+                    "stalls": self.metrics.total_stalls,
+                    "branch_accuracy": self.metrics.branch_accuracy,
+                },
             }
-        })
+        )
 
     def analyze_critical_path(self) -> List[str]:
         """Identify instructions on the critical execution path."""
@@ -294,89 +313,92 @@ class PerformanceProfiler:
                 max_latency = max(latencies)
 
                 if max_latency > 10:  # Threshold for critical
-                    critical_instructions.append({
-                        'instruction': instruction,
-                        'avg_latency': avg_latency,
-                        'max_latency': max_latency,
-                        'count': len(latencies)
-                    })
+                    critical_instructions.append(
+                        {
+                            "instruction": instruction,
+                            "avg_latency": avg_latency,
+                            "max_latency": max_latency,
+                            "count": len(latencies),
+                        }
+                    )
 
         # Sort by impact (latency * count)
         critical_instructions.sort(
-            key=lambda x: x['max_latency'] * x['count'],
-            reverse=True
+            key=lambda x: x["max_latency"] * x["count"],
+            reverse=True,  # type: ignore[operator]
         )
 
         self.critical_path_instructions = [
-            inst['instruction'] for inst in critical_instructions[:10]
+            inst["instruction"]
+            for inst in critical_instructions[:10]  # type: ignore[misc]
         ]
 
         return self.critical_path_instructions
 
-    def get_performance_summary(self) -> Dict[str, Any]:
+    def get_performance_summary(self) -> dict[str, Any]:
         """Generate comprehensive performance summary."""
         self.metrics.calculate_derived_metrics()
 
         # Additional statistics could be calculated here if needed
 
         # Identify top bottlenecks
-        bottleneck_summary = defaultdict(int)
+        bottleneck_summary = defaultdict(int)  # type: ignore[var-annotated]
         for event in self.bottleneck_events:
-            bottleneck_summary[event['description']] += 1
+            bottleneck_summary[event["description"]] += 1
 
         top_bottlenecks = sorted(
-            bottleneck_summary.items(),
-            key=lambda x: x[1],
-            reverse=True
+            bottleneck_summary.items(), key=lambda x: x[1], reverse=True
         )[:5]
 
         return {
-            'basic_metrics': {
-                'total_cycles': self.metrics.total_cycles,
-                'total_instructions': self.metrics.total_instructions,
-                'ipc': round(self.metrics.ipc, 3),
-                'simulation_time': time.time() - self.start_time
+            "basic_metrics": {
+                "total_cycles": self.metrics.total_cycles,
+                "total_instructions": self.metrics.total_instructions,
+                "ipc": round(self.metrics.ipc, 3),
+                "simulation_time": time.time() - self.start_time,
             },
-            'branch_performance': {
-                'predictions': self.metrics.branch_predictions,
-                'mispredictions': self.metrics.branch_mispredictions,
-                'accuracy': round(self.metrics.branch_accuracy, 2),
-                'penalty_cycles': self.metrics.branch_penalty_cycles
+            "branch_performance": {
+                "predictions": self.metrics.branch_predictions,
+                "mispredictions": self.metrics.branch_mispredictions,
+                "accuracy": round(self.metrics.branch_accuracy, 2),
+                "penalty_cycles": self.metrics.branch_penalty_cycles,
             },
-            'cache_performance': {
-                'icache_hit_rate': round(self.metrics.icache_hit_rate, 2),
-                'dcache_hit_rate': round(self.metrics.dcache_hit_rate, 2),
-                'total_miss_penalty': self.metrics.cache_miss_penalty_cycles
+            "cache_performance": {
+                "icache_hit_rate": round(self.metrics.icache_hit_rate, 2),
+                "dcache_hit_rate": round(self.metrics.dcache_hit_rate, 2),
+                "total_miss_penalty": self.metrics.cache_miss_penalty_cycles,
             },
-            'stall_analysis': {
-                'data_stalls': self.metrics.data_stalls,
-                'structural_stalls': self.metrics.structural_stalls,
-                'control_stalls': self.metrics.control_stalls,
-                'total_stalls': self.metrics.total_stalls,
-                'stall_percentage': round(
+            "stall_analysis": {
+                "data_stalls": self.metrics.data_stalls,
+                "structural_stalls": self.metrics.structural_stalls,
+                "control_stalls": self.metrics.control_stalls,
+                "total_stalls": self.metrics.total_stalls,
+                "stall_percentage": round(
                     self.metrics.total_stalls / self.metrics.total_cycles * 100
-                    if self.metrics.total_cycles > 0 else 0, 2
-                )
+                    if self.metrics.total_cycles > 0
+                    else 0,
+                    2,
+                ),
             },
-            'hazard_analysis': {
-                'raw_hazards': self.metrics.raw_hazards,
-                'war_hazards': self.metrics.war_hazards,
-                'waw_hazards': self.metrics.waw_hazards
+            "hazard_analysis": {
+                "raw_hazards": self.metrics.raw_hazards,
+                "war_hazards": self.metrics.war_hazards,
+                "waw_hazards": self.metrics.waw_hazards,
             },
-            'functional_unit_utilization': {
-                'alu': round(self.metrics.alu_utilization, 2),
-                'fpu': round(self.metrics.fpu_utilization, 2),
-                'lsu': round(self.metrics.lsu_utilization, 2)
+            "functional_unit_utilization": {
+                "alu": round(self.metrics.alu_utilization, 2),
+                "fpu": round(self.metrics.fpu_utilization, 2),
+                "lsu": round(self.metrics.lsu_utilization, 2),
             },
-            'instruction_mix': {
-                'arithmetic': self.metrics.arithmetic_instructions,
-                'logical': self.metrics.logical_instructions,
-                'memory': self.metrics.memory_instructions,
-                'branch': self.metrics.branch_instructions,
-                'floating_point': self.metrics.floating_point_instructions
+            "instruction_mix": {
+                "arithmetic": self.metrics.arithmetic_instructions,
+                "logical": self.metrics.logical_instructions,
+                "memory": self.metrics.memory_instructions,
+                "branch": self.metrics.branch_instructions,
+                "floating_point": self.metrics.floating_point_instructions,
             },
-            'bottlenecks': top_bottlenecks,
-            'critical_path': self.critical_path_instructions[:5]
+            "bottlenecks": top_bottlenecks,
+            "critical_path": self.critical_path_instructions[:5],
         }
 
     def generate_recommendations(self) -> List[str]:
@@ -404,8 +426,11 @@ class PerformanceProfiler:
             )
 
         # Stalls
-        stall_percentage = (self.metrics.total_stalls / self.metrics.total_cycles * 100
-                           if self.metrics.total_cycles > 0 else 0)
+        stall_percentage = (
+            self.metrics.total_stalls / self.metrics.total_cycles * 100
+            if self.metrics.total_cycles > 0
+            else 0
+        )
         if stall_percentage > 20:
             recommendations.append(
                 f"Pipeline stalls account for {stall_percentage:.1f}% of cycles. "
@@ -431,7 +456,7 @@ class PerformanceProfiler:
     def export_report(self, filepath: Path, format: str = "json") -> None:
         """
         Export performance report to file.
-        
+
         Args:
             filepath: Output file path
             format: Output format ('json', 'csv', or 'txt')
@@ -441,18 +466,18 @@ class PerformanceProfiler:
 
         if format == "json":
             report = {
-                'summary': summary,
-                'recommendations': recommendations,
-                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+                "summary": summary,
+                "recommendations": recommendations,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
-            with open(filepath, 'w') as f:
+            with open(filepath, "w") as f:
                 json.dump(report, f, indent=2)
 
         elif format == "csv":
             # Flatten metrics for CSV
-            with open(filepath, 'w', newline='') as f:
+            with open(filepath, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(['Metric', 'Value'])
+                writer.writerow(["Metric", "Value"])
 
                 # Write basic metrics
                 for category, metrics in summary.items():
@@ -462,12 +487,12 @@ class PerformanceProfiler:
 
                 # Write recommendations
                 writer.writerow([])
-                writer.writerow(['Recommendations'])
+                writer.writerow(["Recommendations"])
                 for rec in recommendations:
                     writer.writerow([rec])
 
         else:  # txt format
-            with open(filepath, 'w') as f:
+            with open(filepath, "w") as f:
                 f.write("=== SUPERSCALAR PIPELINE PERFORMANCE REPORT ===\n")
                 f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
@@ -494,40 +519,41 @@ class PerformanceProfiler:
             import matplotlib.pyplot as plt
 
             fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-            fig.suptitle('Pipeline Performance Trends', fontsize=16)
+            fig.suptitle("Pipeline Performance Trends", fontsize=16)
 
             # IPC over time
             if self.ipc_history:
                 axes[0, 0].plot(list(self.ipc_history))
-                axes[0, 0].set_title('Instructions Per Cycle (IPC)')
-                axes[0, 0].set_xlabel('Cycle')
-                axes[0, 0].set_ylabel('IPC')
+                axes[0, 0].set_title("Instructions Per Cycle (IPC)")
+                axes[0, 0].set_xlabel("Cycle")
+                axes[0, 0].set_ylabel("IPC")
                 axes[0, 0].grid(True, alpha=0.3)
 
             # Branch accuracy
             if self.branch_accuracy_history:
                 axes[0, 1].plot(list(self.branch_accuracy_history))
-                axes[0, 1].set_title('Branch Prediction Accuracy')
-                axes[0, 1].set_xlabel('Prediction Count')
-                axes[0, 1].set_ylabel('Accuracy (%)')
+                axes[0, 1].set_title("Branch Prediction Accuracy")
+                axes[0, 1].set_xlabel("Prediction Count")
+                axes[0, 1].set_ylabel("Accuracy (%)")
                 axes[0, 1].grid(True, alpha=0.3)
 
             # Instruction mix pie chart
-            inst_mix = self.get_performance_summary()['instruction_mix']
+            inst_mix = self.get_performance_summary()["instruction_mix"]
             if sum(inst_mix.values()) > 0:
-                axes[1, 0].pie(inst_mix.values(), labels=inst_mix.keys(),
-                             autopct='%1.1f%%')
-                axes[1, 0].set_title('Instruction Mix')
+                axes[1, 0].pie(
+                    inst_mix.values(), labels=inst_mix.keys(), autopct="%1.1f%%"
+                )
+                axes[1, 0].set_title("Instruction Mix")
 
             # Stall breakdown
-            stalls = self.get_performance_summary()['stall_analysis']
-            stall_types = ['data_stalls', 'structural_stalls', 'control_stalls']
+            stalls = self.get_performance_summary()["stall_analysis"]
+            stall_types = ["data_stalls", "structural_stalls", "control_stalls"]
             stall_values = [stalls[st] for st in stall_types]
             if sum(stall_values) > 0:
                 axes[1, 1].bar(stall_types, stall_values)
-                axes[1, 1].set_title('Pipeline Stalls by Type')
-                axes[1, 1].set_ylabel('Cycles')
-                axes[1, 1].tick_params(axis='x', rotation=45)
+                axes[1, 1].set_title("Pipeline Stalls by Type")
+                axes[1, 1].set_ylabel("Cycles")
+                axes[1, 1].tick_params(axis="x", rotation=45)
 
             plt.tight_layout()
             plt.show()
@@ -544,23 +570,23 @@ class PerformanceOptimizer:
     def __init__(self, profiler: PerformanceProfiler) -> None:
         self.profiler = profiler
 
-    def analyze_branch_patterns(self) -> Dict[str, Any]:
+    def analyze_branch_patterns(self) -> dict[str, Any]:
         """Analyze branch prediction patterns."""
         # Group branches by behavior
-        always_taken = []
-        always_not_taken = []
-        biased_taken = []
-        biased_not_taken = []
-        random_branches = []
+        always_taken = []  # type: ignore[var-annotated]
+        always_not_taken = []  # type: ignore[var-annotated]
+        biased_taken = []  # type: ignore[var-annotated]
+        biased_not_taken = []  # type: ignore[var-annotated]
+        random_branches = []  # type: ignore[var-annotated]
 
         # Analysis would go here based on profiler data
 
         return {
-            'always_taken': always_taken,
-            'always_not_taken': always_not_taken,
-            'biased_taken': biased_taken,
-            'biased_not_taken': biased_not_taken,
-            'random': random_branches
+            "always_taken": always_taken,
+            "always_not_taken": always_not_taken,
+            "biased_taken": biased_taken,
+            "biased_not_taken": biased_not_taken,
+            "random": random_branches,
         }
 
     def suggest_compiler_optimizations(self) -> List[str]:
@@ -571,22 +597,27 @@ class PerformanceOptimizer:
         summary = self.profiler.get_performance_summary()
 
         # Loop unrolling
-        if summary['branch_performance']['predictions'] > 1000:
+        if summary["branch_performance"]["predictions"] > 1000:
             suggestions.append(
                 "Consider loop unrolling to reduce branch instructions "
                 "and improve instruction-level parallelism."
             )
 
         # Instruction scheduling
-        if summary['stall_analysis']['data_stalls'] > summary['basic_metrics']['total_cycles'] * 0.1:
+        if (
+            summary["stall_analysis"]["data_stalls"]
+            > summary["basic_metrics"]["total_cycles"] * 0.1
+        ):
             suggestions.append(
                 "Reorder independent instructions to reduce data dependencies "
                 "and minimize pipeline stalls."
             )
 
         # Function inlining
-        if 'JAL' in self.profiler.instruction_counts and \
-           self.profiler.instruction_counts['JAL'] > 100:
+        if (
+            "JAL" in self.profiler.instruction_counts
+            and self.profiler.instruction_counts["JAL"] > 100
+        ):
             suggestions.append(
                 "Consider function inlining for frequently called small functions "
                 "to reduce call/return overhead."

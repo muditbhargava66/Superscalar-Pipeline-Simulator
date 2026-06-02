@@ -50,8 +50,6 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-.pytest_cache/
-cover/
 
 # Translations
 *.mo
@@ -154,36 +152,15 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be added to the global gitignore or merged into this project gitignore.  For PyCharm
-#  Community Edition, use 'PyCharm CE'.  They can be found at:
-#  https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and https://github.com/github/gitignore/blob/main/Global/PyCharm.gitignore
+# IDE and Editor Files
 .idea/
-
-# VS Code
 .vscode/
 *.code-workspace
-
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
-# Vim
 *.swp
 *.swo
 *~
-
-# Emacs
-*~
-\#*\#
-/.emacs.desktop
-/.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
-.\#*
+*.sublime-project
+*.sublime-workspace
 
 # Simulator specific files
 simulation_results.txt
@@ -196,10 +173,7 @@ benchmark_validation_results.json
 performance_report.html
 performance_report.json
 performance_report.csv
-
-# Test artifacts
-test_benchmark.asm
-.pytest_cache/
+*.log
 
 # Documentation builds
 docs/_build/

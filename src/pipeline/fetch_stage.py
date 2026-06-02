@@ -5,6 +5,7 @@ try:
 except (ImportError, ValueError):
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from utils.instruction import Instruction
 import logging
@@ -49,10 +50,14 @@ class FetchStage:
                         else:
                             self.pc += 4
                     else:
-                        logging.warning(f"Skipping invalid instruction data at PC: {self.pc}")
+                        logging.warning(
+                            f"Skipping invalid instruction data at PC: {self.pc}"
+                        )
                         self.pc += 4
                 else:
-                    logging.warning(f"Instruction data is not a dictionary at PC: {self.pc}")
+                    logging.warning(
+                        f"Instruction data is not a dictionary at PC: {self.pc}"
+                    )
                     self.pc += 4
             else:
                 logging.debug(f"Instruction cache miss at PC: {self.pc}")
@@ -64,7 +69,7 @@ class FetchStage:
         if not instruction_str.strip():
             return None
 
-        if instruction_str.strip().startswith('.') or ':' in instruction_str:
+        if instruction_str.strip().startswith(".") or ":" in instruction_str:
             return None
 
         parts = instruction_str.strip().split()
@@ -73,10 +78,7 @@ class FetchStage:
         opcode = parts[0]
         operands = parts[1:]
 
-        instruction_dict = {
-            'opcode': opcode,
-            'operands': operands
-        }
+        instruction_dict = {"opcode": opcode, "operands": operands}
 
         return instruction_dict
 
@@ -89,8 +91,8 @@ class FetchStage:
             logging.error("Instruction data is not a dictionary")
             return None
 
-        opcode = instruction_data.get('opcode')
-        operands = instruction_data.get('operands', [])
+        opcode = instruction_data.get("opcode")
+        operands = instruction_data.get("operands", [])
 
         if opcode is None:
             logging.error("Invalid instruction data format")
@@ -105,17 +107,22 @@ class FetchStage:
     def get_pc(self):
         return self.pc
 
+
 class MemoryAccessError(Exception):
     pass
+
 
 class InstructionCacheMissError(Exception):
     pass
 
+
 class InstructionParseError(Exception):
     pass
 
+
 class InstructionCacheError(Exception):
     pass
+
 
 class InstructionDataError(Exception):
     pass

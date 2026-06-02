@@ -8,7 +8,7 @@ fetched instructions and reads operands from the register file.
 from __future__ import annotations
 
 import logging
-from typing import Union
+from typing import List, Union
 
 # Handle imports for both package and direct execution
 try:
@@ -17,6 +17,7 @@ try:
 except (ImportError, ValueError):
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from register_file.register_file import RegisterFile
     from utils.instruction import Instruction
@@ -25,7 +26,7 @@ except (ImportError, ValueError):
 class DecodeStage:
     """
     Decode stage of the pipeline.
-    
+
     Responsible for:
     - Decoding instruction format
     - Reading source operands from register file
@@ -36,7 +37,7 @@ class DecodeStage:
     def __init__(self, register_file: RegisterFile) -> None:
         """
         Initialize the decode stage.
-        
+
         Args:
             register_file: Reference to the register file
         """
@@ -52,14 +53,14 @@ class DecodeStage:
     def decode(self, instructions: List[Instruction]) -> List[Instruction]:
         """
         Decode a list of fetched instructions.
-        
+
         Args:
             instructions: List of fetched instructions
-            
+
         Returns:
             List of decoded instructions with operands resolved
         """
-        decoded_instructions = []
+        decoded_instructions = []  # type: ignore[var-annotated]
 
         for instruction in instructions:
             if instruction is None:
@@ -76,7 +77,9 @@ class DecodeStage:
                 if self.check_hazards(decoded_instruction, decoded_instructions):
                     # Stall if hazard detected
                     self.stall_cycles += 1
-                    logging.debug(f"Hazard detected for {decoded_instruction}, stalling")
+                    logging.debug(
+                        f"Hazard detected for {decoded_instruction}, stalling"
+                    )
                     break  # Stop decoding further instructions this cycle
 
                 decoded_instructions.append(decoded_instruction)
@@ -91,10 +94,10 @@ class DecodeStage:
     def decode_instruction(self, instruction: Instruction) -> Instruction:
         """
         Decode instruction format and identify operands.
-        
+
         Args:
             instruction: Instruction to decode
-            
+
         Returns:
             Decoded instruction with fields populated
         """
@@ -104,7 +107,11 @@ class DecodeStage:
         # Ensure destination is properly set for instructions that write
         if instruction.has_destination_register() and not instruction.destination:
             # For R-type and I-type instructions, first operand is typically destination
-            if len(instruction.operands) > 0 and instruction.opcode.upper() not in ["SW", "SB", "SH"]:
+            if len(instruction.operands) > 0 and instruction.opcode.upper() not in [
+                "SW",
+                "SB",
+                "SH",
+            ]:
                 instruction.destination = instruction.operands[0]
 
         # Log decoded instruction
@@ -115,9 +122,9 @@ class DecodeStage:
     def read_operands(self, instruction: Instruction) -> None:
         """
         Read source operand values from the register file.
-        
+
         This modifies the instruction's operand values in place.
-        
+
         Args:
             instruction: Instruction whose operands to read
         """
@@ -145,10 +152,10 @@ class DecodeStage:
     def is_register(self, operand: Union[str, int]) -> bool:
         """
         Check if an operand is a register reference.
-        
+
         Args:
             operand: Operand to check
-            
+
         Returns:
             True if operand is a register, False otherwise
         """
@@ -157,7 +164,7 @@ class DecodeStage:
 
         # Common MIPS register formats
         # $0-$31, $zero, $at, $v0-$v1, $a0-$a3, $t0-$t9, $s0-$s7, $gp, $sp, $fp, $ra
-        if operand.startswith('$'):
+        if operand.startswith("$"):
             # Check numeric registers ($0-$31)
             if operand[1:].isdigit():
                 reg_num = int(operand[1:])
@@ -165,35 +172,58 @@ class DecodeStage:
 
             # Check named registers
             named_registers = {
-                '$zero': 0, '$at': 1,
-                '$v0': 2, '$v1': 3,
-                '$a0': 4, '$a1': 5, '$a2': 6, '$a3': 7,
-                '$t0': 8, '$t1': 9, '$t2': 10, '$t3': 11,
-                '$t4': 12, '$t5': 13, '$t6': 14, '$t7': 15,
-                '$s0': 16, '$s1': 17, '$s2': 18, '$s3': 19,
-                '$s4': 20, '$s5': 21, '$s6': 22, '$s7': 23,
-                '$t8': 24, '$t9': 25,
-                '$k0': 26, '$k1': 27,
-                '$gp': 28, '$sp': 29, '$fp': 30, '$ra': 31
+                "$zero": 0,
+                "$at": 1,
+                "$v0": 2,
+                "$v1": 3,
+                "$a0": 4,
+                "$a1": 5,
+                "$a2": 6,
+                "$a3": 7,
+                "$t0": 8,
+                "$t1": 9,
+                "$t2": 10,
+                "$t3": 11,
+                "$t4": 12,
+                "$t5": 13,
+                "$t6": 14,
+                "$t7": 15,
+                "$s0": 16,
+                "$s1": 17,
+                "$s2": 18,
+                "$s3": 19,
+                "$s4": 20,
+                "$s5": 21,
+                "$s6": 22,
+                "$s7": 23,
+                "$t8": 24,
+                "$t9": 25,
+                "$k0": 26,
+                "$k1": 27,
+                "$gp": 28,
+                "$sp": 29,
+                "$fp": 30,
+                "$ra": 31,
             }
             return operand in named_registers
 
         # Alternative format: r0-r31
-        if operand.startswith('r') and operand[1:].isdigit():
+        if operand.startswith("r") and operand[1:].isdigit():
             reg_num = int(operand[1:])
             return 0 <= reg_num < self.register_file.num_registers
 
         return False
 
-    def check_hazards(self, instruction: Instruction,
-                     previous_instructions: List[Instruction]) -> bool:
+    def check_hazards(
+        self, instruction: Instruction, previous_instructions: List[Instruction]
+    ) -> bool:
         """
         Check for data hazards with previously decoded instructions.
-        
+
         Args:
             instruction: Current instruction being decoded
             previous_instructions: Instructions decoded earlier in this cycle
-            
+
         Returns:
             True if hazard detected, False otherwise
         """
@@ -206,7 +236,9 @@ class DecodeStage:
                 dest_reg = prev_inst.get_destination_register()
                 if dest_reg in source_registers:
                     # RAW hazard detected
-                    logging.debug(f"RAW hazard: {instruction.opcode} depends on {prev_inst.opcode}")
+                    logging.debug(
+                        f"RAW hazard: {instruction.opcode} depends on {prev_inst.opcode}"
+                    )
                     return True
 
         # Check for WAW hazards
@@ -216,7 +248,9 @@ class DecodeStage:
                 if prev_inst.has_destination_register():
                     if prev_inst.get_destination_register() == dest_reg:
                         # WAW hazard detected
-                        logging.debug(f"WAW hazard: both {instruction.opcode} and {prev_inst.opcode} write to {dest_reg}")
+                        logging.debug(
+                            f"WAW hazard: both {instruction.opcode} and {prev_inst.opcode} write to {dest_reg}"
+                        )
                         return True
 
         return False
@@ -224,10 +258,13 @@ class DecodeStage:
     def get_statistics(self) -> dict:
         """Get decode stage statistics."""
         return {
-            'decoded_instructions': self.decoded_count,
-            'stall_cycles': self.stall_cycles,
-            'decode_efficiency': (self.decoded_count / (self.decoded_count + self.stall_cycles) * 100)
-                               if (self.decoded_count + self.stall_cycles) > 0 else 0
+            "decoded_instructions": self.decoded_count,
+            "stall_cycles": self.stall_cycles,
+            "decode_efficiency": (
+                self.decoded_count / (self.decoded_count + self.stall_cycles) * 100
+            )
+            if (self.decoded_count + self.stall_cycles) > 0
+            else 0,
         }
 
     def reset(self) -> None:

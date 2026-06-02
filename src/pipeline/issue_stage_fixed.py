@@ -6,7 +6,7 @@ import paths and enhanced hazard detection.
 """
 
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from ..utils.instruction import Instruction
 from ..utils.reservation_station import ReservationStation
@@ -15,23 +15,28 @@ from ..utils.reservation_station import ReservationStation
 class IssueStage:
     """
     Issue stage of the superscalar pipeline.
-    
+
     Responsible for:
     - Dispatching instructions to reservation stations
     - Checking for structural and data hazards
     - Managing instruction dependencies
     """
 
-    def __init__(self, num_reservation_stations: int, register_file,
-                 data_forwarding_unit, execution_units: dict):
+    def __init__(
+        self,
+        num_reservation_stations: int,
+        register_file,
+        data_forwarding_unit,
+        execution_units: dict,
+    ):
         """
         Initialize the issue stage.
-        
+
         Args:
             num_reservation_stations: Number of reservation stations
             register_file: Reference to register file
             data_forwarding_unit: Reference to data forwarding unit
-            execution_units: Dictionary of available execution units
+            execution_units: dictionary of available execution units
         """
         self.reservation_stations = [
             ReservationStation(i) for i in range(num_reservation_stations)
@@ -46,15 +51,17 @@ class IssueStage:
         self.structural_hazards = 0
         self.data_hazards = 0
 
-        logging.debug(f"Initialized Issue Stage with {num_reservation_stations} reservation stations")
+        logging.debug(
+            f"Initialized Issue Stage with {num_reservation_stations} reservation stations"
+        )
 
     def issue(self, decoded_instructions: List[Instruction]) -> List[Instruction]:
         """
         Issue instructions to reservation stations.
-        
+
         Args:
             decoded_instructions: List of decoded instructions
-            
+
         Returns:
             List of successfully issued instructions
         """
@@ -70,7 +77,9 @@ class IssueStage:
             # Find a free reservation station
             reservation_station = self.find_free_reservation_station()
 
-            if reservation_station is not None and self.is_instruction_ready(instruction):
+            if reservation_station is not None and self.is_instruction_ready(
+                instruction
+            ):
                 # Issue the instruction to the reservation station
                 reservation_station.issue(instruction)
                 issued_instructions.append(instruction)
@@ -88,14 +97,16 @@ class IssueStage:
 
         return issued_instructions
 
-    def find_free_reservation_station(self) -> Optional[ReservationStation]:
+    def find_free_reservation_station(self) -> ReservationStation | None:
         """Find a free reservation station."""
         for reservation_station in self.reservation_stations:
             if reservation_station.is_free():
                 return reservation_station
         return None
 
-    def update_reservation_stations(self, executed_instructions: List[Instruction]) -> None:
+    def update_reservation_stations(
+        self, executed_instructions: List[Instruction]
+    ) -> None:
         """Update reservation stations with executed instruction results."""
         for reservation_station in self.reservation_stations:
             reservation_station.update(executed_instructions)
@@ -114,10 +125,10 @@ class IssueStage:
     def is_instruction_ready(self, instruction: Instruction) -> bool:
         """
         Check if instruction is ready for issue.
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             True if instruction is ready, False otherwise
         """
@@ -142,10 +153,10 @@ class IssueStage:
     def is_operand_ready(self, operand) -> bool:
         """
         Check if a specific operand is ready.
-        
+
         Args:
             operand: Operand to check (register number or immediate)
-            
+
         Returns:
             True if operand is ready, False otherwise
         """
@@ -178,10 +189,10 @@ class IssueStage:
     def _check_structural_hazards(self, instruction: Instruction) -> bool:
         """
         Check for structural hazards.
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             True if no structural hazard, False otherwise
         """
@@ -191,10 +202,12 @@ class IssueStage:
 
             # Check if execution unit is available
             if unit_type in self.execution_units:
-                available_units = self.execution_units[unit_type].get('count', 1)
+                available_units = self.execution_units[unit_type].get("count", 1)
                 used_units = sum(
-                    1 for rs in self.reservation_stations
-                    if not rs.is_free() and rs.instruction.get_execution_unit_type() == unit_type
+                    1
+                    for rs in self.reservation_stations
+                    if not rs.is_free()
+                    and rs.instruction.get_execution_unit_type() == unit_type
                 )
 
                 return used_units < available_units
@@ -209,10 +222,10 @@ class IssueStage:
     def _check_additional_hazards(self, instruction: Instruction) -> bool:
         """
         Check for additional hazards (WAW, WAR, etc.).
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             True if no additional hazards, False otherwise
         """
@@ -229,12 +242,12 @@ class IssueStage:
         total_attempts = self.issued_count + self.stall_count
 
         return {
-            'instructions_issued': self.issued_count,
-            'pipeline_stalls': self.stall_count,
-            'structural_hazards': self.structural_hazards,
-            'data_hazards': self.data_hazards,
-            'issue_rate': (self.issued_count / max(1, total_attempts)) * 100,
-            'reservation_station_utilization': self._get_rs_utilization()
+            "instructions_issued": self.issued_count,
+            "pipeline_stalls": self.stall_count,
+            "structural_hazards": self.structural_hazards,
+            "data_hazards": self.data_hazards,
+            "issue_rate": (self.issued_count / max(1, total_attempts)) * 100,
+            "reservation_station_utilization": self._get_rs_utilization(),
         }
 
     def _get_rs_utilization(self) -> float:

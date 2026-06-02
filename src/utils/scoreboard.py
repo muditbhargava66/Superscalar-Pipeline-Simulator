@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Set, Union
 
 from .instruction import Instruction
 
@@ -21,23 +21,26 @@ except (ImportError, ValueError):
     # Fallback for direct execution
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from register_file.register_file import RegisterFile
 
 
 class HazardType(Enum):
     """Types of pipeline hazards."""
+
     RAW = "Read After Write"  # True dependency
     WAR = "Write After Read"  # Anti-dependency
-    WAW = "Write After Write" # Output dependency
+    WAW = "Write After Write"  # Output dependency
     STRUCTURAL = "Structural"  # Resource conflict
 
 
 @dataclass
 class RegisterStatus:
     """Status of a register in the scoreboard."""
+
     busy: bool = False
-    writing_instruction: Optional[Instruction] = None
+    writing_instruction: Instruction | None = None
     reading_instructions: List[Instruction] = field(default_factory=list)
     last_write_cycle: int = -1
 
@@ -45,8 +48,9 @@ class RegisterStatus:
 @dataclass
 class FunctionalUnitStatus:
     """Status of a functional unit."""
+
     busy: bool = False
-    instruction: Optional[Instruction] = None
+    instruction: Instruction | None = None
     remaining_cycles: int = 0
     result_ready: bool = False
 
@@ -54,7 +58,7 @@ class FunctionalUnitStatus:
 class Scoreboard:
     """
     Scoreboard for hazard detection and resource tracking.
-    
+
     Tracks:
     - Register read/write status
     - Functional unit availability
@@ -65,7 +69,7 @@ class Scoreboard:
     def __init__(self, num_registers: int = 32) -> None:
         """
         Initialize the scoreboard.
-        
+
         Args:
             num_registers: Number of registers to track
         """
@@ -77,18 +81,18 @@ class Scoreboard:
         ]
 
         # Functional unit status
-        self.function_unit_status: Dict[str, FunctionalUnitStatus] = {}
+        self.function_unit_status: dict[str, FunctionalUnitStatus] = {}
 
         # Instruction tracking
-        self.active_instructions: Dict[int, Instruction] = {}  # id -> instruction
-        self.instruction_dependencies: Dict[int, Set[int]] = {}  # id -> dependent ids
+        self.active_instructions: dict[int, Instruction] = {}  # id -> instruction
+        self.instruction_dependencies: dict[int, Set[int]] = {}  # id -> dependent ids
 
         # Statistics
         self.hazard_counts = {
             HazardType.RAW: 0,
             HazardType.WAR: 0,
             HazardType.WAW: 0,
-            HazardType.STRUCTURAL: 0
+            HazardType.STRUCTURAL: 0,
         }
 
         self.current_cycle = 0
@@ -101,12 +105,18 @@ class Scoreboard:
             return register
 
         # Handle MIPS register names
-        if isinstance(register, str) and hasattr(RegisterFile, 'REGISTER_NAMES') and register in RegisterFile.REGISTER_NAMES:
+        if (
+            isinstance(register, str)
+            and hasattr(RegisterFile, "REGISTER_NAMES")
+            and register in RegisterFile.REGISTER_NAMES
+        ):
             return RegisterFile.REGISTER_NAMES[register]
 
         # Try to parse as number
         if isinstance(register, str):
-            if register.startswith('$') and register[1:].isdigit() or register.startswith('r') and register[1:].isdigit():
+            if (register.startswith("$") and register[1:].isdigit()) or (
+                register.startswith("r") and register[1:].isdigit()
+            ):
                 return int(register[1:])
 
         raise ValueError(f"Invalid register: {register}")
@@ -114,10 +124,10 @@ class Scoreboard:
     def check_hazards(self, instruction: Instruction) -> List[HazardType]:
         """
         Check for all hazards for an instruction.
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             List of detected hazards
         """
@@ -144,10 +154,10 @@ class Scoreboard:
     def check_raw_hazard(self, instruction: Instruction) -> bool:
         """
         Check for Read-After-Write hazards.
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             True if RAW hazard exists
         """
@@ -173,10 +183,10 @@ class Scoreboard:
     def check_war_hazard(self, instruction: Instruction) -> bool:
         """
         Check for Write-After-Read hazards.
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             True if WAR hazard exists
         """
@@ -195,7 +205,9 @@ class Scoreboard:
             if readers:
                 for reader in readers:
                     if reader != instruction:
-                        logging.debug(f"WAR hazard: {instruction} writes after {reader} reads")
+                        logging.debug(
+                            f"WAR hazard: {instruction} writes after {reader} reads"
+                        )
                         self.hazard_counts[HazardType.WAR] += 1
                         return True
 
@@ -207,10 +219,10 @@ class Scoreboard:
     def check_waw_hazard(self, instruction: Instruction) -> bool:
         """
         Check for Write-After-Write hazards.
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             True if WAW hazard exists
         """
@@ -228,7 +240,9 @@ class Scoreboard:
             if self.register_status[reg_num].busy:
                 writer = self.register_status[reg_num].writing_instruction
                 if writer and writer != instruction:
-                    logging.debug(f"WAW hazard: both {instruction} and {writer} write to {dest_reg}")
+                    logging.debug(
+                        f"WAW hazard: both {instruction} and {writer} write to {dest_reg}"
+                    )
                     self.hazard_counts[HazardType.WAW] += 1
                     return True
 
@@ -240,10 +254,10 @@ class Scoreboard:
     def check_structural_hazard(self, instruction: Instruction) -> bool:
         """
         Check for structural hazards (resource conflicts).
-        
+
         Args:
             instruction: Instruction to check
-            
+
         Returns:
             True if structural hazard exists
         """
@@ -258,7 +272,9 @@ class Scoreboard:
                 break
 
         if not available:
-            logging.debug(f"Structural hazard: No {unit_type} available for {instruction}")
+            logging.debug(
+                f"Structural hazard: No {unit_type} available for {instruction}"
+            )
             self.hazard_counts[HazardType.STRUCTURAL] += 1
             return True
 
@@ -291,11 +307,12 @@ class Scoreboard:
 
         return not self.function_unit_status[unit_name].busy
 
-    def allocate_register_write(self, register: Union[str, int],
-                               instruction: Instruction) -> None:
+    def allocate_register_write(
+        self, register: Union[str, int], instruction: Instruction
+    ) -> None:
         """
         Allocate a register for writing.
-        
+
         Args:
             register: Register to allocate
             instruction: Instruction that will write
@@ -312,11 +329,12 @@ class Scoreboard:
         except ValueError as e:
             logging.warning(f"Cannot allocate register: {e}")
 
-    def allocate_register_read(self, register: Union[str, int],
-                              instruction: Instruction) -> None:
+    def allocate_register_read(
+        self, register: Union[str, int], instruction: Instruction
+    ) -> None:
         """
         Track register read by an instruction.
-        
+
         Args:
             register: Register being read
             instruction: Instruction reading the register
@@ -335,7 +353,7 @@ class Scoreboard:
     def deallocate_register(self, register: Union[str, int]) -> None:
         """
         Deallocate a register after write completes.
-        
+
         Args:
             register: Register to deallocate
         """
@@ -350,11 +368,12 @@ class Scoreboard:
         except ValueError as e:
             logging.warning(f"Cannot deallocate register: {e}")
 
-    def remove_register_read(self, register: Union[str, int],
-                            instruction: Instruction) -> None:
+    def remove_register_read(
+        self, register: Union[str, int], instruction: Instruction
+    ) -> None:
         """
         Remove register read tracking after instruction completes.
-        
+
         Args:
             register: Register that was read
             instruction: Instruction that read the register
@@ -368,11 +387,12 @@ class Scoreboard:
         except ValueError:
             pass
 
-    def allocate_function_unit(self, unit_name: str, instruction: Instruction,
-                              cycles: int = 1) -> None:
+    def allocate_function_unit(
+        self, unit_name: str, instruction: Instruction, cycles: int = 1
+    ) -> None:
         """
         Allocate a functional unit to an instruction.
-        
+
         Args:
             unit_name: Name of the functional unit
             instruction: Instruction using the unit
@@ -409,25 +429,25 @@ class Scoreboard:
                     status.result_ready = True
                     logging.debug(f"{unit_name} result ready")
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get scoreboard statistics."""
         busy_registers = sum(1 for r in self.register_status if r.busy)
         busy_units = sum(1 for u in self.function_unit_status.values() if u.busy)
 
         return {
-            'current_cycle': self.current_cycle,
-            'busy_registers': busy_registers,
-            'register_utilization': (busy_registers / self.num_registers * 100),
-            'busy_functional_units': busy_units,
-            'total_functional_units': len(self.function_unit_status),
-            'hazard_counts': dict(self.hazard_counts),
-            'total_hazards': sum(self.hazard_counts.values())
+            "current_cycle": self.current_cycle,
+            "busy_registers": busy_registers,
+            "register_utilization": (busy_registers / self.num_registers * 100),
+            "busy_functional_units": busy_units,
+            "total_functional_units": len(self.function_unit_status),
+            "hazard_counts": dict(self.hazard_counts),
+            "total_hazards": sum(self.hazard_counts.values()),
         }
 
     def visualize_state(self) -> str:
         """
         Create a visual representation of scoreboard state.
-        
+
         Returns:
             ASCII representation of the scoreboard
         """
@@ -452,8 +472,10 @@ class Scoreboard:
         for unit_name, status in self.function_unit_status.items():
             if status.busy:
                 inst = status.instruction
-                lines.append(f"  {unit_name}: {inst.opcode if inst else 'Unknown'} "
-                           f"({status.remaining_cycles} cycles left)")
+                lines.append(
+                    f"  {unit_name}: {inst.opcode if inst else 'Unknown'} "
+                    f"({status.remaining_cycles} cycles left)"
+                )
             else:
                 lines.append(f"  {unit_name}: Available")
 
