@@ -44,10 +44,20 @@
 ## Introduction
 
 ### Purpose
-The purpose of this design document is to provide a detailed description of the architecture, design, and implementation of a superscalar pipeline with data forwarding and branch prediction. The document aims to serve as a comprehensive guide for developers, researchers, and enthusiasts interested in understanding the inner workings of a superscalar processor pipeline.
+This design document provides a comprehensive description of the architecture, design, and implementation of an advanced superscalar pipeline simulator. The document serves as a technical guide for developers, computer architecture researchers, and educators interested in understanding modern processor design principles and implementation techniques.
 
 ### Scope
-The scope of this document covers the design and implementation of a superscalar pipeline simulator that incorporates data forwarding and branch prediction techniques. The simulator focuses on the key components of the pipeline, including instruction fetching, decoding, issuing, execution, memory access, and write-back. It also encompasses the data forwarding unit and branch prediction algorithms.
+This document covers the design and implementation of a production-quality superscalar pipeline simulator featuring:
+
+- **Advanced Pipeline Architecture**: Multi-stage superscalar pipeline with out-of-order execution
+- **Sophisticated Branch Prediction**: Tournament, perceptron, and adaptive hybrid predictors
+- **Memory Hierarchy**: Multi-level cache system with non-blocking cache and MSHR support
+- **Register Management**: Enhanced register renaming with reorder buffer and precise exceptions
+- **Power Modeling**: Comprehensive power and energy analysis capabilities
+- **Performance Analysis**: Detailed profiling and bottleneck identification tools
+- **Error Handling**: Robust exception handling and debugging support
+
+The simulator is designed for research, education, and performance analysis applications in computer architecture.
 
 ### Overview
 A superscalar pipeline is a high-performance processor architecture that allows multiple instructions to be executed simultaneously in different stages of the pipeline. Data forwarding is a technique used to reduce data dependencies between instructions, enabling faster execution. Branch prediction is employed to minimize the impact of control hazards by predicting the outcome of branch instructions and speculatively executing instructions along the predicted path.

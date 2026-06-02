@@ -8,7 +8,7 @@ load and store operations to/from the data cache and main memory.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, List, Tuple
 
 # Handle imports for both package and direct execution
 try:
@@ -17,6 +17,7 @@ try:
 except (ImportError, ValueError):
     import os
     import sys
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from cache.cache import DataCache, Memory
     from utils.instruction import Instruction
@@ -25,7 +26,7 @@ except (ImportError, ValueError):
 class MemoryAccessStage:
     """
     Memory access stage of the pipeline.
-    
+
     Handles:
     - Load operations (reading from memory)
     - Store operations (writing to memory)
@@ -36,7 +37,7 @@ class MemoryAccessStage:
     def __init__(self, data_cache: DataCache, memory: Memory) -> None:
         """
         Initialize the memory access stage.
-        
+
         Args:
             data_cache: Reference to the data cache
             memory: Reference to main memory
@@ -57,13 +58,15 @@ class MemoryAccessStage:
 
         logging.debug("Initialized Memory Access Stage")
 
-    def access_memory(self, executed_instructions: List[Tuple[Instruction, Any]]) -> List[Tuple[Instruction, Any]]:
+    def access_memory(
+        self, executed_instructions: List[Tuple[Instruction, Any]]
+    ) -> List[Tuple[Instruction, Any]]:
         """
         Process memory operations for executed instructions.
-        
+
         Args:
             executed_instructions: List of (instruction, result) tuples from execute stage
-            
+
         Returns:
             List of (instruction, result) tuples with memory operations completed
         """
@@ -84,7 +87,9 @@ class MemoryAccessStage:
                         memory_results.append((instruction, memory_result))
                     elif instruction.is_store():
                         self._handle_store(instruction, exec_result)
-                        memory_results.append((instruction, None))  # Stores don't produce results
+                        memory_results.append(
+                            (instruction, None)
+                        )  # Stores don't produce results
                 else:
                     # Non-memory instructions bypass this stage
                     memory_results.append((instruction, exec_result))
@@ -100,11 +105,11 @@ class MemoryAccessStage:
     def _handle_load(self, instruction: Instruction, address_calculation: Any) -> Any:
         """
         Handle load instruction.
-        
+
         Args:
             instruction: Load instruction
             address_calculation: Result from execute stage (typically the address)
-            
+
         Returns:
             Loaded data value
         """
@@ -144,7 +149,9 @@ class MemoryAccessStage:
                 # Add to cache
                 self.data_cache.add_data(address, data)
 
-                logging.debug(f"Cache miss for address {address:#x}, loaded {data} from memory")
+                logging.debug(
+                    f"Cache miss for address {address:#x}, loaded {data} from memory"
+                )
 
             except Exception as e:
                 logging.error(f"Memory read error at address {address:#x}: {e}")
@@ -158,7 +165,7 @@ class MemoryAccessStage:
     def _handle_store(self, instruction: Instruction, store_data: Any) -> None:
         """
         Handle store instruction.
-        
+
         Args:
             instruction: Store instruction
             store_data: Data to store (from execute stage)
@@ -169,7 +176,7 @@ class MemoryAccessStage:
         # Get data to store
         if store_data is None:
             # Extract from instruction if not provided
-            if hasattr(instruction, 'register_values'):
+            if hasattr(instruction, "register_values"):
                 # Get the source register value
                 source_regs = instruction.get_source_registers()
                 if source_regs:
@@ -197,17 +204,17 @@ class MemoryAccessStage:
     def _calculate_address(self, instruction: Instruction) -> int:
         """
         Calculate memory address for load/store instruction.
-        
+
         Args:
             instruction: Memory instruction
-            
+
         Returns:
             Calculated memory address
         """
         # For MIPS-style addressing: offset(base)
         # Instruction should have base address and offset
 
-        if hasattr(instruction, 'memory_address'):
+        if hasattr(instruction, "memory_address"):
             return instruction.memory_address
 
         # Parse from operands
@@ -219,12 +226,15 @@ class MemoryAccessStage:
                 base_addr = 0
 
                 # Simple parsing - improve based on actual format
-                if isinstance(instruction.operands[1], str) and '(' in instruction.operands[1]:
-                    parts = instruction.operands[1].split('(')
+                if (
+                    isinstance(instruction.operands[1], str)
+                    and "(" in instruction.operands[1]
+                ):
+                    parts = instruction.operands[1].split("(")
                     offset = int(parts[0]) if parts[0] else 0
-                    base_reg = parts[1].rstrip(')')
+                    base_reg = parts[1].rstrip(")")
 
-                    if hasattr(instruction, 'register_values'):
+                    if hasattr(instruction, "register_values"):
                         base_addr = instruction.register_values.get(base_reg, 0)
                 elif isinstance(instruction.operands[1], int):
                     offset = instruction.operands[1]
@@ -234,7 +244,7 @@ class MemoryAccessStage:
             elif instruction.is_store():
                 # Store: sw $rt, offset($rs)
                 # Similar parsing
-                return 0  # Placeholder
+                return 0  # TODO : Placeholder
 
         # Default address
         return 0
@@ -266,14 +276,14 @@ class MemoryAccessStage:
         hit_rate = (self.cache_hits / total_accesses * 100) if total_accesses > 0 else 0
 
         return {
-            'load_count': self.load_count,
-            'store_count': self.store_count,
-            'total_memory_operations': self.load_count + self.store_count,
-            'cache_hits': self.cache_hits,
-            'cache_misses': self.cache_misses,
-            'cache_hit_rate': hit_rate,
-            'memory_stall_cycles': self.memory_stalls,
-            'store_buffer_occupancy': len(self.store_buffer)
+            "load_count": self.load_count,
+            "store_count": self.store_count,
+            "total_memory_operations": self.load_count + self.store_count,
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "cache_hit_rate": hit_rate,
+            "memory_stall_cycles": self.memory_stalls,
+            "store_buffer_occupancy": len(self.store_buffer),
         }
 
     def reset(self) -> None:
@@ -291,27 +301,32 @@ class MemoryAccessStage:
 class AdvancedMemoryAccessStage(MemoryAccessStage):
     """
     Enhanced memory access stage with additional features.
-    
+
     Adds:
     - Memory disambiguation
     - Prefetching support
     - Non-blocking cache support
     """
 
-    def __init__(self, data_cache: DataCache, memory: Memory,
-                 enable_prefetch: bool = True) -> None:
+    def __init__(
+        self, data_cache: DataCache, memory: Memory, enable_prefetch: bool = True
+    ) -> None:
         super().__init__(data_cache, memory)
         self.enable_prefetch = enable_prefetch
 
         # Memory disambiguation table
         self.load_queue: List[Tuple[Instruction, int]] = []
-        self.pending_loads: List[Tuple[Instruction, int, int]] = []  # (instruction, address, cycle)
+        self.pending_loads: List[
+            Tuple[Instruction, int, int]
+        ] = []  # (instruction, address, cycle)
 
         # Prefetch queue
         self.prefetch_queue: List[int] = []
         self.prefetch_distance = 4  # Prefetch 4 words ahead
 
-    def access_memory(self, executed_instructions: List[Tuple[Instruction, Any]]) -> List[Tuple[Instruction, Any]]:
+    def access_memory(
+        self, executed_instructions: List[Tuple[Instruction, Any]]
+    ) -> List[Tuple[Instruction, Any]]:
         """Enhanced memory access with disambiguation and prefetching."""
         memory_results = []
 
@@ -350,8 +365,9 @@ class AdvancedMemoryAccessStage(MemoryAccessStage):
 
         return memory_results
 
-    def _check_memory_dependencies(self, load_instruction: Instruction,
-                                  load_address: int) -> bool:
+    def _check_memory_dependencies(
+        self, load_instruction: Instruction, load_address: int
+    ) -> bool:
         """Check if load has dependencies on pending stores."""
         # Check store buffer for address conflicts
         for store_addr, _ in self.store_buffer:
@@ -386,18 +402,20 @@ class AdvancedMemoryAccessStage(MemoryAccessStage):
 
             # Initiate prefetch (non-blocking)
             if not self.data_cache.has_data(prefetch_address):
-                # In real implementation, this would be non-blocking
+                # TODO : In real implementation, this would be non-blocking
                 logging.debug(f"Prefetching address {prefetch_address:#x}")
 
     def _process_pending_loads(self) -> None:
         """Process non-blocking loads that may have completed."""
-        # In a real implementation, this would check if memory requests completed
+        # TODO : In a real implementation, this would check if memory requests completed
         # For simulation, we just track cycles
         completed_loads = []
 
         for i, (inst, addr, start_cycle) in enumerate(self.pending_loads):
             # Assume 10 cycle memory latency
-            if start_cycle + 10 <= self.current_cycle:  # Need to track current cycle
+            if start_cycle + 10 <= getattr(
+                self, "current_cycle", 0
+            ):  # Need to track current cycle
                 completed_loads.append(i)
 
         # Remove completed loads

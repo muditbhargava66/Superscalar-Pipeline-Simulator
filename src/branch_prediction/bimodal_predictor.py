@@ -8,23 +8,23 @@ counters indexed by branch PC.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Dict, List, Optional
 
 
 class BimodalPredictor:
     """
     Bimodal branch predictor using 2-bit saturating counters.
-    
+
     Each branch PC indexes into a table of 2-bit counters that track
     the branch behavior. The counter saturates at 0 (strongly not taken)
     and 3 (strongly taken).
-    
+
     Counter states:
     - 0: Strongly Not Taken
     - 1: Weakly Not Taken
     - 2: Weakly Taken
     - 3: Strongly Taken
-    
+
     Attributes:
         num_entries: Number of entries in the prediction table
         prediction_table: Table of 2-bit saturating counters
@@ -33,7 +33,7 @@ class BimodalPredictor:
     def __init__(self, num_entries: int = 1024) -> None:
         """
         Initialize the bimodal predictor.
-        
+
         Args:
             num_entries: Number of entries in the prediction table (power of 2)
         """
@@ -48,25 +48,27 @@ class BimodalPredictor:
 
         logging.debug(f"Initialized Bimodal predictor with {num_entries} entries")
 
-    def predict(self, instruction) -> Optional[int]:
+    def predict(self, instruction) -> int | None:
         """
         Predict the outcome of a branch instruction.
-        
+
         Args:
             instruction: The branch instruction (with PC address)
-            
+
         Returns:
             Predicted target PC if taken, PC+4 if not taken
         """
         # Extract PC from instruction
-        if hasattr(instruction, 'address'):
+        if hasattr(instruction, "address"):
             pc = instruction.address
-        elif hasattr(instruction, 'pc'):
+        elif hasattr(instruction, "pc"):
             pc = instruction.pc
         elif isinstance(instruction, int):
             pc = instruction
         else:
-            logging.error(f"Invalid instruction type for prediction: {type(instruction)}")
+            logging.error(
+                f"Invalid instruction type for prediction: {type(instruction)}"
+            )
             return None
 
         # Get index into prediction table
@@ -83,12 +85,15 @@ class BimodalPredictor:
         # Calculate predicted PC
         if prediction_taken:
             # For branch instructions, calculate target
-            if hasattr(instruction, 'opcode'):
+            if hasattr(instruction, "opcode"):
                 opcode = instruction.opcode.upper()
 
                 if opcode in ["BEQ", "BNE", "BLT", "BGE", "BLTU", "BGEU"]:
                     # Conditional branches
-                    if hasattr(instruction, 'operands') and len(instruction.operands) >= 3:
+                    if (
+                        hasattr(instruction, "operands")
+                        and len(instruction.operands) >= 3
+                    ):
                         try:
                             offset = int(instruction.operands[2])
                             return pc + 4 + (offset * 4)  # PC-relative
@@ -96,7 +101,10 @@ class BimodalPredictor:
                             return pc + 8  # Default taken target
                 elif opcode in ["J", "JAL"]:
                     # Unconditional jumps
-                    if hasattr(instruction, 'operands') and len(instruction.operands) >= 1:
+                    if (
+                        hasattr(instruction, "operands")
+                        and len(instruction.operands) >= 1
+                    ):
                         try:
                             return int(instruction.operands[0])
                         except ValueError:
@@ -111,15 +119,15 @@ class BimodalPredictor:
     def update(self, instruction, actual_taken: bool) -> None:
         """
         Update the predictor with the actual branch outcome.
-        
+
         Args:
             instruction: The branch instruction
             actual_taken: Whether the branch was actually taken
         """
         # Extract PC from instruction
-        if hasattr(instruction, 'address'):
+        if hasattr(instruction, "address"):
             pc = instruction.address
-        elif hasattr(instruction, 'pc'):
+        elif hasattr(instruction, "pc"):
             pc = instruction.pc
         elif isinstance(instruction, int):
             pc = instruction
@@ -145,24 +153,28 @@ class BimodalPredictor:
             self.prediction_table[index] = max(counter - 1, 0)
 
         # Record for analysis
-        self.branch_history.append({
-            'pc': pc,
-            'predicted': predicted_taken,
-            'actual': actual_taken,
-            'counter_before': counter,
-            'counter_after': self.prediction_table[index]
-        })
+        self.branch_history.append(
+            {
+                "pc": pc,
+                "predicted": predicted_taken,
+                "actual": actual_taken,
+                "counter_before": counter,
+                "counter_after": self.prediction_table[index],
+            }
+        )
 
-        logging.debug(f"Updated branch at PC {pc:#x}: predicted={predicted_taken}, "
-                     f"actual={actual_taken}, counter={counter}->{self.prediction_table[index]}")
+        logging.debug(
+            f"Updated branch at PC {pc:#x}: predicted={predicted_taken}, "
+            f"actual={actual_taken}, counter={counter}->{self.prediction_table[index]}"
+        )
 
     def _get_index(self, pc: int) -> int:
         """
         Calculate the index into the prediction table.
-        
+
         Args:
             pc: Program counter value
-            
+
         Returns:
             Index into the prediction table
         """
@@ -181,7 +193,7 @@ class BimodalPredictor:
     def get_accuracy(self) -> float:
         """
         Calculate the prediction accuracy.
-        
+
         Returns:
             Accuracy as a percentage (0-100)
         """
@@ -191,10 +203,10 @@ class BimodalPredictor:
         correct_predictions = self.total_predictions - self.total_mispredictions
         return (correct_predictions / self.total_predictions) * 100.0
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """
         Get comprehensive statistics about the predictor.
-        
+
         Returns:
             Dictionary containing various statistics
         """
@@ -204,45 +216,49 @@ class BimodalPredictor:
             counter_distribution[counter] += 1
 
         # Calculate table utilization (unique PCs seen)
-        unique_pcs = len(set(entry['pc'] for entry in self.branch_history))
+        unique_pcs = len(set(entry["pc"] for entry in self.branch_history))
 
         return {
-            'total_predictions': self.total_predictions,
-            'total_mispredictions': self.total_mispredictions,
-            'accuracy': self.get_accuracy(),
-            'counter_distribution': counter_distribution,
-            'table_utilization': (unique_pcs / self.num_entries * 100) if self.num_entries > 0 else 0,
-            'strongly_biased_entries': counter_distribution[0] + counter_distribution[3]
+            "total_predictions": self.total_predictions,
+            "total_mispredictions": self.total_mispredictions,
+            "accuracy": self.get_accuracy(),
+            "counter_distribution": counter_distribution,
+            "table_utilization": (unique_pcs / self.num_entries * 100)
+            if self.num_entries > 0
+            else 0,
+            "strongly_biased_entries": counter_distribution[0]
+            + counter_distribution[3],
         }
 
-    def get_branch_stats(self, pc: int) -> Optional[Dict]:
+    def get_branch_stats(self, pc: int) -> dict | None:
         """
         Get statistics for a specific branch.
-        
+
         Args:
             pc: Program counter of the branch
-            
+
         Returns:
             Statistics for the branch or None if not found
         """
-        branch_entries = [entry for entry in self.branch_history if entry['pc'] == pc]
+        branch_entries = [entry for entry in self.branch_history if entry["pc"] == pc]
 
         if not branch_entries:
             return None
 
-        taken_count = sum(1 for entry in branch_entries if entry['actual'])
+        taken_count = sum(1 for entry in branch_entries if entry["actual"])
         total_count = len(branch_entries)
-        correct_count = sum(1 for entry in branch_entries
-                          if entry['predicted'] == entry['actual'])
+        correct_count = sum(
+            1 for entry in branch_entries if entry["predicted"] == entry["actual"]
+        )
 
         return {
-            'pc': pc,
-            'total_executions': total_count,
-            'taken_count': taken_count,
-            'not_taken_count': total_count - taken_count,
-            'correct_predictions': correct_count,
-            'accuracy': (correct_count / total_count * 100) if total_count > 0 else 0,
-            'current_counter': self.prediction_table[self._get_index(pc)]
+            "pc": pc,
+            "total_executions": total_count,
+            "taken_count": taken_count,
+            "not_taken_count": total_count - taken_count,
+            "correct_predictions": correct_count,
+            "accuracy": (correct_count / total_count * 100) if total_count > 0 else 0,
+            "current_counter": self.prediction_table[self._get_index(pc)],
         }
 
     def reset(self) -> None:
@@ -256,14 +272,16 @@ class BimodalPredictor:
 
     def __repr__(self) -> str:
         """String representation of the predictor."""
-        return (f"BimodalPredictor(entries={self.num_entries}, "
-                f"accuracy={self.get_accuracy():.1f}%)")
+        return (
+            f"BimodalPredictor(entries={self.num_entries}, "
+            f"accuracy={self.get_accuracy():.1f}%)"
+        )
 
 
 class AdaptiveBimodalPredictor(BimodalPredictor):
     """
     Enhanced bimodal predictor with adaptive features.
-    
+
     Adds:
     - Dynamic threshold adjustment
     - Hysteresis for frequently mispredicted branches
@@ -272,12 +290,12 @@ class AdaptiveBimodalPredictor(BimodalPredictor):
 
     def __init__(self, num_entries: int = 1024) -> None:
         super().__init__(num_entries)
-        self.misprediction_counts: Dict[int, int] = {}  # PC -> mispredict count
+        self.misprediction_counts: dict[int, int] = {}  # PC -> mispredict count
         self.hysteresis_table = [0] * num_entries  # Additional state bits
 
     def update(self, instruction, actual_taken: bool) -> None:
         """Update with adaptive features."""
-        pc = getattr(instruction, 'address', getattr(instruction, 'pc', instruction))
+        pc = getattr(instruction, "address", getattr(instruction, "pc", instruction))
         index = self._get_index(pc)
 
         # Check if this was a misprediction
@@ -306,10 +324,10 @@ class AdaptiveBimodalPredictor(BimodalPredictor):
     def get_problem_branches(self, threshold: int = 10) -> List[Dict]:
         """
         Identify branches with high misprediction rates.
-        
+
         Args:
             threshold: Minimum mispredictions to be considered problematic
-            
+
         Returns:
             List of problematic branches with their statistics
         """
@@ -319,7 +337,9 @@ class AdaptiveBimodalPredictor(BimodalPredictor):
             if mispredict_count >= threshold:
                 stats = self.get_branch_stats(pc)
                 if stats:
-                    stats['misprediction_count'] = mispredict_count
+                    stats["misprediction_count"] = mispredict_count
                     problem_branches.append(stats)
 
-        return sorted(problem_branches, key=lambda x: x['misprediction_count'], reverse=True)
+        return sorted(
+            problem_branches, key=lambda x: x["misprediction_count"], reverse=True
+        )

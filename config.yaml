@@ -1,37 +1,99 @@
-# Pipeline Configuration
+# Superscalar Pipeline Simulator - Configuration
+# Version: 1.1.0
+# Last Updated: June 2026
 pipeline:
   num_stages: 6
   fetch_width: 4
   issue_width: 4
   execute_units:
     ALU:
-      count: 2
+      count: 4
+      latency: 1
     FPU:
-      count: 1
+      count: 2
+      latency: 3
     LSU:
-      count: 1
+      count: 2
+      latency: 2
 
-# Branch Prediction Configuration
+# Enhanced Execution Configuration
+execution:
+  enhanced_renaming: true
+  register_renaming:
+    arch_registers: 32
+    physical_registers: 128
+    rob_size: 64
+    issue_queue_size: 32
+    alu_count: 4
+    fpu_count: 2
+    lsu_count: 2
+
+# Enhanced Branch Prediction Configuration
 branch_predictor:
-  type: gshare
+  type: tournament  # Options: tournament, perceptron, adaptive, gshare, bimodal
   num_entries: 1024
   history_length: 8
+  # Tournament predictor configuration
+  tournament:
+    predictor_1:
+      type: bimodal
+      size: 1024
+    predictor_2:
+      type: gshare
+      size: 1024
+      history_bits: 12
+    meta_bits: 12
+  # Perceptron predictor configuration
+  perceptron:
+    history_length: 16
+    table_size: 1024
+    theta: 45
+  # Adaptive configuration
+  adaptation_window: 1000
+  adaptation_threshold: 0.05
 
-# Cache Configuration
-cache:
+# Enhanced Memory and Cache Configuration
+memory:
+  non_blocking_cache: true
   instruction_cache:
     size: 32KB
     block_size: 64
     associativity: 4
+    hit_latency: 1
+    miss_penalty: 10
   data_cache:
     size: 32KB
     block_size: 64
     associativity: 4
+    hit_latency: 1
+    miss_penalty: 10
+    mshr_count: 8  # Miss Status Holding Registers
+    write_policy: write_back
+  l2_cache:
+    size: 256KB
+    block_size: 64
+    associativity: 8
+    hit_latency: 8
+    miss_penalty: 100
 
 # Simulation Configuration
 simulation:
-  num_instructions: 1000
+  max_cycles: 10000  # Maximum simulation cycles
   output_file: simulation_results.txt
+  enable_profiling: false
+  enable_visualization: false
+
+# Power Modeling Configuration
+power_modeling:
+  enabled: true
+  technology_node: 45.0  # nm
+  voltage: 1.0  # V
+  frequency: 2.0  # GHz
+  dvfs_enabled: true
+  clock_gating_enabled: true
+  power_gating_enabled: false
+  ambient_temp: 25.0  # °C
+  thermal_resistance: 1.0  # °C/W
 
 # Debugging Configuration
 debug:
