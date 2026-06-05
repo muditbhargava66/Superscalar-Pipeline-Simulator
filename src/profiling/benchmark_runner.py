@@ -354,14 +354,14 @@ class BenchmarkRunner:
 </head>
 <body>
     <h1>Benchmark Report</h1>
-    
+
     <div class="summary">
         <h2>Summary</h2>
         <p>Total Benchmarks: {len(self.results)}</p>
         <p>Successful: {len(successful_results)}</p>
         <p>Failed: {len(self.results) - len(successful_results)}</p>
     </div>
-    
+
     <h2>Results</h2>
 """
 

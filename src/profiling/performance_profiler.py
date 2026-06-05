@@ -162,8 +162,8 @@ class PerformanceProfiler:
 
     def _calculate_memory_usage(
         self,
-        initial: psutil._common.pmem,
-        final: psutil._common.pmem,  # type: ignore[name-defined]
+        initial: Any,
+        final: Any,
     ) -> dict[str, float]:
         """Calculate memory usage statistics."""
         return {

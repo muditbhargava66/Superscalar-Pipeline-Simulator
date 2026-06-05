@@ -19,12 +19,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
-    
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     - name: Cache pip dependencies
       uses: actions/cache@v5
       with:
@@ -34,28 +34,28 @@ jobs:
         key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-${{ matrix.python-version }}-
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
-    
+
     - name: Lint with ruff (check only)
       run: |
         python -m ruff check src/ tests/ --fix
-    
+
     - name: Format check with ruff
       run: |
         python -m ruff format --check src/ tests/
-    
+
     - name: Type check with mypy
       run: |
         python -m mypy src/ --ignore-missing-imports || echo "MyPy warnings found (non-blocking)"
-    
+
     - name: Test with pytest
       run: |
         python -m pytest tests/ -v --cov=src --cov-report=term
-    
+
     - name: Test CLI functionality
       run: |
         python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
@@ -65,21 +65,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    
+
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
         python-version: "3.11"
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install bandit[toml] safety
-    
+
     - name: Run security checks with bandit
       run: |
         bandit -r src/ -f json -o bandit-report.json || true
-    
+
     - name: Check dependencies with safety
       run: |
         safety check --json --output safety-report.json || true
@@ -89,24 +89,24 @@ jobs:
     needs: [test, security]
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
-    
+
     steps:
     - uses: actions/checkout@v6
-    
+
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
         python-version: "3.11"
-    
+
     - name: Install build dependencies
       run: |
         python -m pip install --upgrade pip
         pip install build
-    
+
     - name: Build package
       run: |
         python -m build
-    
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v7
       with:
@@ -116,25 +116,25 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    
+
     steps:
     - uses: actions/checkout@v6
-    
+
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
         python-version: "3.11"
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev,docs]"
-    
+
     - name: Build documentation
       run: |
         cd docs
         make html
-    
+
     - name: Deploy to GitHub Pages
       if: success()
       uses: peaceiris/actions-gh-pages@v4

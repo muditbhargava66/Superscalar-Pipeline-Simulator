@@ -30,10 +30,10 @@
 2. **Create a virtual environment:**
    ```bash
    python -m venv venv
-   
+
    # On macOS/Linux:
    source venv/bin/activate
-   
+
    # On Windows:
    venv\Scripts\activate
    ```
@@ -42,7 +42,7 @@
    ```bash
    # Basic installation
    pip install -r requirements.txt
-   
+
    # Development installation (includes testing, linting, docs)
    pip install -r requirements-dev.txt
    ```
@@ -74,7 +74,7 @@ pip install -r requirements-dev.txt
    ```bash
    # Using Homebrew (recommended)
    brew install python@3.10
-   
+
    # Or download from python.org
    ```
 
@@ -140,17 +140,16 @@ pip install -r requirements-dev.txt
 After installation, verify everything works:
 
 ```bash
-# Test basic import
-python -c "from src.main import main; print('Installation successful!')"
+# Run basic simulation
+python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 50
 
-# Run basic tests
-python -m pytest tests/test_complete_pipeline.py::TestInstruction -v
+# Run test suite
+python -m pytest tests/ -v
 
 # Test GUI (if display available)
-python src/gui/config_gui.py
-
-# Run a simple simulation
-python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 50
+python main.py --gui
+# Or directly:
+python -c "import sys; sys.path.insert(0, 'src'); from gui.config_gui import main; main()"
 
 # Test examples
 python examples/basic_simulation.py
@@ -264,12 +263,87 @@ mypy src/ --ignore-missing-imports
 After successful installation:
 
 1. Read the [User Guide](user_guide.md)
-2. Try the [Quick Start Tutorial](tutorials/quickstart.md)
-3. Explore the [Example Configurations](examples/)
+2. Try the [Example Scripts](../examples/)
+3. Explore the [Configuration Reference](../config.yaml)
 4. Check out the [API Reference](api_reference.md)
 
 For development:
 
-1. Read the [Contributing Guide](contributing.md)
-2. Review the [Architecture Documentation](architecture.md)
-3. Check the [Testing Guide](testing.md)
+1. Read the [Contributing Guide](../CONTRIBUTING.md)
+2. Review the [Design Document](design_document.md)
+3. Run the test suite: `python -m pytest tests/ -v`
+
+---
+
+## First-Time User Quick Start
+
+If you've just cloned the repository and want to get running immediately:
+
+### Step 1: Set up your environment
+
+```bash
+# Navigate to the project directory
+cd Superscalar-Pipeline-Simulator-
+
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt  # Optional: for development
+```
+
+### Step 2: Verify installation
+
+```bash
+# Run the test suite (should show 139 passing tests)
+python -m pytest tests/ -v
+
+# Run a simple simulation
+python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
+```
+
+### Step 3: Try different benchmarks
+
+```bash
+# Simple sorting
+python main.py --benchmark benchmarks/simple_sort.asm --max-cycles 100
+
+# Fibonacci with profiling
+python main.py --benchmark benchmarks/simple_fibonacci.asm --max-cycles 100 --profile
+
+# Advanced: integer workload benchmark
+python main.py --benchmark benchmarks/integer/dhrystone_like.asm --max-cycles 200 --profile
+
+# Advanced: mixed compute-intensive benchmark
+python main.py --benchmark benchmarks/mixed/compute_intensive.asm --max-cycles 300 --profile
+```
+
+### Step 4: Launch the GUI (optional)
+
+```bash
+# Launch the configuration GUI (requires tkinter)
+python main.py --gui
+
+# Or with a benchmark pre-loaded
+python main.py --gui --benchmark benchmarks/simple_arithmetic.asm
+```
+
+### Step 5: Explore further
+
+- See all available benchmarks in `benchmarks/` (including `integer/`, `memory/`, `mixed/` subdirectories)
+- Try different branch predictors: edit `config.yaml` and change `branch_predictor.type`
+- Enable visualization: add `--visualize` flag
+- Read the [User Guide](user_guide.md) for detailed documentation
+
+### Troubleshooting First Run
+
+| Issue | Solution |
+|-------|----------|
+| `ModuleNotFoundError` | Make sure you're in the project root and have run `pip install -r requirements.txt` |
+| `No module named '_tkinter'` | Install tkinter: macOS usually includes it; Linux: `sudo apt install python3-tk` |
+| `Execution error for AND` | This was fixed in v1.2.0 — pull the latest code |
+| GUI exits silently | Ensure you have a display available; try running without `--gui` first |
+| Tests fail | Run `pip install -r requirements-dev.txt` then `python -m pytest tests/ -v` |

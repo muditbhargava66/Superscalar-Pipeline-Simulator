@@ -324,13 +324,13 @@ class PerformanceProfiler:
 
         # Sort by impact (latency * count)
         critical_instructions.sort(
-            key=lambda x: x["max_latency"] * x["count"],
-            reverse=True,  # type: ignore[operator]
+            key=lambda x: x["max_latency"] * x["count"],  # type: ignore[operator]
+            reverse=True,
         )
 
         self.critical_path_instructions = [
-            inst["instruction"]
-            for inst in critical_instructions[:10]  # type: ignore[misc]
+            inst["instruction"]  # type: ignore[misc]
+            for inst in critical_instructions[:10]
         ]
 
         return self.critical_path_instructions

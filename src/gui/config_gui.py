@@ -42,12 +42,19 @@ class ConfigurationGUI:
                     "LSU": {"count": 1},
                 },
             },
+            "execution": {
+                "enhanced_renaming": True,
+                "rename_bandwidth": 4,
+                "commit_bandwidth": 4,
+                "ooo_execution": False,
+                "ooo_window_size": 16,
+            },
             "branch_predictor": {
                 "type": "gshare",
                 "num_entries": 1024,
                 "history_length": 8,
             },
-            "cache": {
+            "memory": {
                 "instruction_cache": {
                     "size": 32768,
                     "block_size": 64,
@@ -194,7 +201,14 @@ class ConfigurationGUI:
         bp_combo = ttk.Combobox(
             frame,
             textvariable=self.bp_type_var,
-            values=["always_taken", "bimodal", "gshare"],
+            values=[
+                "always_taken",
+                "bimodal",
+                "gshare",
+                "tournament",
+                "perceptron",
+                "adaptive",
+            ],
         )
         bp_combo.grid(row=0, column=1, padx=10, sticky=tk.W)
 
@@ -238,7 +252,7 @@ class ConfigurationGUI:
             row=0, column=0, sticky=tk.W, pady=2
         )
         self.icache_size_var = tk.StringVar(
-            value=str(self.config["cache"]["instruction_cache"]["size"])
+            value=str(self.config["memory"]["instruction_cache"]["size"])
         )
         ttk.Entry(icache_frame, textvariable=self.icache_size_var, width=10).grid(
             row=0, column=1, padx=10
@@ -248,7 +262,7 @@ class ConfigurationGUI:
             row=1, column=0, sticky=tk.W, pady=2
         )
         self.icache_block_var = tk.StringVar(
-            value=str(self.config["cache"]["instruction_cache"]["block_size"])
+            value=str(self.config["memory"]["instruction_cache"]["block_size"])
         )
         ttk.Entry(icache_frame, textvariable=self.icache_block_var, width=10).grid(
             row=1, column=1, padx=10
@@ -266,7 +280,7 @@ class ConfigurationGUI:
             row=0, column=0, sticky=tk.W, pady=2
         )
         self.dcache_size_var = tk.StringVar(
-            value=str(self.config["cache"]["data_cache"]["size"])
+            value=str(self.config["memory"]["data_cache"]["size"])
         )
         ttk.Entry(dcache_frame, textvariable=self.dcache_size_var, width=10).grid(
             row=0, column=1, padx=10
@@ -276,7 +290,7 @@ class ConfigurationGUI:
             row=1, column=0, sticky=tk.W, pady=2
         )
         self.dcache_block_var = tk.StringVar(
-            value=str(self.config["cache"]["data_cache"]["block_size"])
+            value=str(self.config["memory"]["data_cache"]["block_size"])
         )
         ttk.Entry(dcache_frame, textvariable=self.dcache_block_var, width=10).grid(
             row=1, column=1, padx=10
@@ -294,7 +308,7 @@ class ConfigurationGUI:
             row=0, column=0, sticky=tk.W, pady=2
         )
         self.memory_size_var = tk.StringVar(
-            value=str(self.config["cache"]["memory_size"])
+            value=str(self.config["memory"]["memory_size"])
         )
         ttk.Entry(mem_frame, textvariable=self.memory_size_var, width=15).grid(
             row=0, column=1, padx=10
@@ -370,17 +384,25 @@ class ConfigurationGUI:
         """Update configuration from GUI values."""
         try:
             # Pipeline
+            self.config.setdefault("pipeline", {})
             self.config["pipeline"]["fetch_width"] = int(self.fetch_width_var.get())
             self.config["pipeline"]["issue_width"] = int(self.issue_width_var.get())
-            self.config["pipeline"]["execute_units"]["ALU"]["count"] = int(
-                self.alu_count_var.get()
-            )
-            self.config["pipeline"]["execute_units"]["FPU"]["count"] = int(
-                self.fpu_count_var.get()
-            )
-            self.config["pipeline"]["execute_units"]["LSU"]["count"] = int(
-                self.lsu_count_var.get()
-            )
+
+            for unit, var in [
+                ("ALU", self.alu_count_var),
+                ("FPU", self.fpu_count_var),
+                ("LSU", self.lsu_count_var),
+            ]:
+                val = (
+                    self.config["pipeline"]
+                    .setdefault("execute_units", {})
+                    .get(unit, {"count": 1})
+                )
+                if isinstance(val, dict):
+                    val["count"] = int(var.get())
+                else:
+                    val = {"count": int(var.get())}
+                self.config["pipeline"]["execute_units"][unit] = val
 
             # Branch predictor
             self.config["branch_predictor"]["type"] = self.bp_type_var.get()
@@ -391,18 +413,32 @@ class ConfigurationGUI:
                 self.bp_history_var.get()
             )
 
-            # Cache
-            self.config["cache"]["instruction_cache"]["size"] = int(
+            def parse_size_val(v):
+                try:
+                    return int(v)
+                except ValueError:
+                    return v
+
+            # Cache (using memory: key to match main config)
+            self.config.setdefault("memory", {})
+            self.config["memory"].setdefault("instruction_cache", {})
+            self.config["memory"].setdefault("data_cache", {})
+
+            self.config["memory"]["instruction_cache"]["size"] = parse_size_val(
                 self.icache_size_var.get()
             )
-            self.config["cache"]["instruction_cache"]["block_size"] = int(
+            self.config["memory"]["instruction_cache"]["block_size"] = int(
                 self.icache_block_var.get()
             )
-            self.config["cache"]["data_cache"]["size"] = int(self.dcache_size_var.get())
-            self.config["cache"]["data_cache"]["block_size"] = int(
+            self.config["memory"]["data_cache"]["size"] = parse_size_val(
+                self.dcache_size_var.get()
+            )
+            self.config["memory"]["data_cache"]["block_size"] = int(
                 self.dcache_block_var.get()
             )
-            self.config["cache"]["memory_size"] = int(self.memory_size_var.get())
+            self.config["memory"]["memory_size"] = parse_size_val(
+                self.memory_size_var.get()
+            )
 
             # Simulation
             self.config["simulation"]["max_cycles"] = int(self.max_cycles_var.get())
@@ -475,17 +511,24 @@ class ConfigurationGUI:
     def _update_gui_from_config(self):
         """Update GUI from configuration values."""
         # Pipeline
-        self.fetch_width_var.set(str(self.config["pipeline"]["fetch_width"]))
-        self.issue_width_var.set(str(self.config["pipeline"]["issue_width"]))
-        self.alu_count_var.set(
-            str(self.config["pipeline"]["execute_units"]["ALU"]["count"])
+        self.fetch_width_var.set(
+            str(self.config.get("pipeline", {}).get("fetch_width", 4))
         )
-        self.fpu_count_var.set(
-            str(self.config["pipeline"]["execute_units"]["FPU"]["count"])
+        self.issue_width_var.set(
+            str(self.config.get("pipeline", {}).get("issue_width", 4))
         )
-        self.lsu_count_var.set(
-            str(self.config["pipeline"]["execute_units"]["LSU"]["count"])
-        )
+
+        def get_count(unit, default):
+            val = (
+                self.config.get("pipeline", {})
+                .get("execute_units", {})
+                .get(unit, default)
+            )
+            return val.get("count", default) if isinstance(val, dict) else val
+
+        self.alu_count_var.set(str(get_count("ALU", 2)))
+        self.fpu_count_var.set(str(get_count("FPU", 1)))
+        self.lsu_count_var.set(str(get_count("LSU", 1)))
 
         # Branch predictor
         self.bp_type_var.set(self.config["branch_predictor"]["type"])
@@ -493,13 +536,17 @@ class ConfigurationGUI:
         self.bp_history_var.set(str(self.config["branch_predictor"]["history_length"]))
 
         # Cache
-        self.icache_size_var.set(str(self.config["cache"]["instruction_cache"]["size"]))
-        self.icache_block_var.set(
-            str(self.config["cache"]["instruction_cache"]["block_size"])
+        self.icache_size_var.set(
+            str(self.config["memory"]["instruction_cache"]["size"])
         )
-        self.dcache_size_var.set(str(self.config["cache"]["data_cache"]["size"]))
-        self.dcache_block_var.set(str(self.config["cache"]["data_cache"]["block_size"]))
-        self.memory_size_var.set(str(self.config["cache"]["memory_size"]))
+        self.icache_block_var.set(
+            str(self.config["memory"]["instruction_cache"]["block_size"])
+        )
+        self.dcache_size_var.set(str(self.config["memory"]["data_cache"]["size"]))
+        self.dcache_block_var.set(
+            str(self.config["memory"]["data_cache"]["block_size"])
+        )
+        self.memory_size_var.set(str(self.config["memory"]["memory_size"]))
 
         # Simulation
         self.max_cycles_var.set(str(self.config["simulation"]["max_cycles"]))
@@ -528,16 +575,80 @@ class ConfigurationGUI:
                 filetypes=[("Assembly files", "*.asm"), ("All files", "*.*")],
             )
 
-            if benchmark_file:
-                # Show info about running simulator
-                messagebox.showinfo(
-                    "Running Simulator",
-                    f"Simulator will run with:\n"
-                    f"Config: {temp_config}\n"
-                    f"Benchmark: {benchmark_file}\n\n"
-                    f"Command to run manually:\n"
-                    f"python src/main.py --config {temp_config} --benchmark {benchmark_file}",
+            if not benchmark_file:
+                return
+
+            # Run the simulator via subprocess
+            import subprocess
+            import sys
+
+            cmd = [
+                sys.executable,
+                "main.py",
+                "--config",
+                str(temp_config),
+                "--benchmark",
+                benchmark_file,
+                "--max-cycles",
+                str(self.config["simulation"]["max_cycles"]),
+            ]
+
+            if self.config["simulation"].get("enable_profiling", False):
+                cmd.append("--profile")
+            if self.config["simulation"].get("enable_visualization", False):
+                cmd.append("--visualize")
+
+            messagebox.showinfo(
+                "Running Simulator",
+                f"Running simulation with:\n"
+                f"Benchmark: {Path(benchmark_file).name}\n\n"
+                f"Results will appear in the terminal.",
+            )
+
+            # Run the simulation
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
                 )
+
+                output = result.stdout
+                if result.stderr:
+                    output += "\n" + result.stderr
+
+                # Show results in a scrollable text window
+                result_window = tk.Toplevel(self.root)
+                result_window.title("Simulation Results")
+                result_window.geometry("800x600")
+
+                text_widget = tk.Text(result_window, wrap=tk.WORD, font=("Courier", 11))
+                scrollbar = ttk.Scrollbar(
+                    result_window, orient=tk.VERTICAL, command=text_widget.yview
+                )
+                text_widget.configure(yscrollcommand=scrollbar.set)
+
+                text_widget.pack(
+                    side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0), pady=5
+                )
+                scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 5), pady=5)
+
+                text_widget.insert(
+                    tk.END, output if output else "Simulation completed with no output."
+                )
+                text_widget.config(state=tk.DISABLED)
+
+            except subprocess.TimeoutExpired:
+                messagebox.showwarning(
+                    "Timeout",
+                    "Simulation timed out after 120 seconds.\n"
+                    "Try reducing max_cycles or using a simpler benchmark.",
+                )
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to run simulation: {e}")
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to prepare simulation: {e}")
 

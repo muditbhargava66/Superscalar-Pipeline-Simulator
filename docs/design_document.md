@@ -77,10 +77,13 @@ The superscalar pipeline consists of the following stages:
 Data forwarding is implemented to reduce data dependencies between instructions. When an instruction produces a result that is needed by a subsequent instruction, the result is forwarded directly from the producing stage to the consuming stage, bypassing the need to wait for the result to be written back to the register file.
 
 ### Branch Prediction
-Branch prediction is employed to minimize the impact of control hazards. The simulator supports various branch prediction algorithms, including:
-- Always Taken: Predicts that branches are always taken.
-- Gshare: Predicts branch outcomes based on global branch history and branch address.
-- Bimodal: Predicts branch outcomes using a saturating counter for each branch.
+Branch prediction is employed to minimize the impact of control hazards. The simulator supports six branch prediction algorithms:
+- **Always Taken**: Predicts that branches are always taken. Simplest baseline predictor.
+- **Bimodal (2-bit)**: Uses 2-bit saturating counters indexed by branch PC. Counter states: 0=Strongly Not Taken, 1=Weakly Not Taken, 2=Weakly Taken, 3=Strongly Taken.
+- **GShare**: XORs the branch PC with a global history register to index into a pattern history table. Captures correlation between branches.
+- **Tournament**: Uses a meta-predictor (chooser table) to dynamically select between a Bimodal and GShare sub-predictor for each branch.
+- **Perceptron**: Neural network-based predictor using a single-layer perceptron with global history as input weights.
+- **Adaptive Hybrid**: Combines Tournament and Perceptron predictors with a sliding-window adaptation mechanism that switches to the better-performing predictor.
 
 ## Detailed Design
 
@@ -141,7 +144,7 @@ Updates:
 - Added support for handling forwarding in the presence of exceptions and pipeline flushes.
 
 ### Branch Predictors
-The branch predictors are used to predict the outcome of branch instructions. Different branch prediction algorithms, such as always taken, gshare, and bimodal, are implemented. The branch predictors utilize branch history tables, pattern history tables, and saturating counters to make accurate predictions. The predicted outcomes are used to speculatively fetch and execute instructions along the predicted path.
+The branch predictors are used to predict the outcome of branch instructions. Six prediction algorithms are implemented: Always Taken, Bimodal (2-bit saturating counters), GShare (global history XOR), Tournament (meta-predictor choosing between Bimodal and GShare), Perceptron (neural network with global history weights), and Adaptive Hybrid (dynamic switching between Tournament and Perceptron). The predictors utilize branch history tables, pattern history tables, saturating counters, and perceptron weight vectors to achieve high prediction accuracy. The predicted outcomes are used to speculatively fetch and execute instructions along the predicted path.
 
 Updates:
 - Implemented advanced branch prediction algorithms, such as tournament predictors and perceptron predictors.
@@ -181,6 +184,12 @@ Updates:
 - Added support for register renaming and mapping logical registers to physical registers.
 - Improved the register allocation and deallocation logic.
 - Implemented methods for handling register dependencies and forwarding.
+
+### Performance Counters
+The `PerformanceCounters` class provides detailed hardware-like performance tracking. It maintains per-cycle counters for instructions issued and in-flight, imports statistics from the hazard controller (RAW/WAR/WAW/structural/control hazards), execution engine, memory hierarchy, and branch predictor. This enables precise bottleneck identification and ILP analysis without external profiling tools.
+
+### Register Renaming Bandwidth
+The `AdvancedRegisterRenaming` class supports configurable `rename_bandwidth` and `commit_bandwidth` parameters, controlling how many instructions can be renamed and committed per cycle. This models realistic superscalar processors where renaming and commit are not unlimited-bandwidth operations.
 
 ## Algorithms
 
@@ -286,14 +295,21 @@ Updates:
 
 ## Future Enhancements
 The following enhancements can be considered for future versions of the superscalar pipeline simulator:
-- Support for a wider range of instruction set architectures (ISAs)
-- Incorporation of advanced branch prediction algorithms, such as neural branch prediction
-- Implementation of speculative execution and branch prediction recovery mechanisms
-- Integration of a memory hierarchy with multiple levels of caches and memory models
-- Optimization of the simulator for better performance and scalability
-- Support for parallel and multi-core architectures
-- Incorporation of power and energy modeling for power-aware simulations
-- Integration with a graphical user interface (GUI) for interactive simulation and visualization
+- Support for a wider range of instruction set architectures (ISAs) beyond MIPS (e.g., RISC-V, ARM)
+- More advanced branch prediction algorithms, such as TAGE or neural branch prediction with deeper history
+- Multi-core and simultaneous multithreading (SMT) support
+- Distributed simulation across multiple machines for large-scale workloads
+- Interactive web-based visualization dashboard with real-time charts
+- Machine learning-based performance prediction and automatic configuration tuning
+- Integration with standard ISA simulators (e.g., gem5) for cross-validation
+
+Note: The following features were listed in earlier versions and have since been implemented:
+- Power and energy modeling with thermal analysis (v1.1.0)
+- GUI-based configuration tool (v1.1.0, improved v1.2.0)
+- Multi-level cache hierarchy with L1/L2 and non-blocking MSHR support (v1.1.0)
+- Tournament, Perceptron, and Adaptive Hybrid branch predictors (v1.1.0)
+- Enhanced register renaming with configurable rename/commit bandwidth (v1.2.0)
+- Comprehensive performance counters with hazard and ILP tracking (v1.2.0)
 
 ## References
 - [1] John L. Hennessy and David A. Patterson. "Computer Architecture: A Quantitative Approach" (6th Edition). Morgan Kaufmann, 2017.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "superscalar-pipeline-simulator"
-version = "1.1.0"
+version = "1.2.0"
 description = "Advanced superscalar pipeline simulator with enhanced features for computer architecture research and education"
 readme = "README.md"
 license = {text = "MIT"}
@@ -16,7 +16,7 @@ maintainers = [
 ]
 keywords = [
     "processor", "pipeline", "superscalar", "simulation", "computer-architecture",
-    "performance-analysis", "education", "research", "branch-prediction", 
+    "performance-analysis", "education", "research", "branch-prediction",
     "cache-simulation", "power-modeling", "register-renaming"
 ]
 classifiers = [
@@ -44,26 +44,24 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "pytest-asyncio>=0.21.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-    "pre-commit>=2.20.0",
-]
-gui = [
-    "tkinter",
-    "PyQt5>=5.15.0",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.3.0",
+    "ruff>=0.4.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.4.0",
+    "types-PyYAML>=6.0.0",
 ]
 visualization = [
-    "matplotlib>=3.5.0",
-    "seaborn>=0.11.0",
-    "plotly>=5.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.13.0",
+    "plotly>=5.17.0",
 ]
 docs = [
-    "sphinx>=5.0.0",
-    "sphinx-rtd-theme>=1.0.0",
-    "myst-parser>=0.18.0",
+    "sphinx>=7.2.0",
+    "sphinx-rtd-theme>=1.3.0",
+    "myst-parser>=2.0.0",
+    "sphinx-autodoc-typehints>=1.24.0",
 ]
 
 [project.urls]
@@ -148,7 +146,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["PLR2004", "S101", "ARG", "FBT"]
-"src/main.py" = ["PLR0913", "PLR0912"]
+"main.py" = ["PLR0913", "PLR0912"]
 "benchmarks/*" = ["ALL"]
 
 [tool.ruff.lint.isort]
@@ -185,7 +183,6 @@ module = [
     "matplotlib.*",
     "numpy.*",
     "yaml.*",
-    "pytest.*",
 ]
 ignore_missing_imports = true
 
