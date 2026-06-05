@@ -115,12 +115,7 @@ memory:
 
 ### Python API Example
 ```python
-from src.config import ConfigManager
-from src.main import SuperscalarSimulator
-
-# Load configuration
-config_manager = ConfigManager()
-config = config_manager.load_from_file('config.yaml')
+from main import SuperscalarSimulator
 
 # Create and run simulator
 simulator = SuperscalarSimulator('config.yaml')
@@ -137,15 +132,20 @@ print(f"Cycles: {results['cycles']}")
 
 | Benchmark | Description | Complexity | Best For |
 |-----------|-------------|------------|----------|
-| `simple_arithmetic.asm` | Basic arithmetic operations | Simple | Testing, Quick validation |
+| `simple_arithmetic.asm` | Basic arithmetic operations (ADD, SUB, AND, OR, XOR) | Simple | Testing, Quick validation |
 | `simple_sort.asm` | Simple sorting algorithm | Simple | Control flow analysis |
 | `simple_fibonacci.asm` | Iterative Fibonacci | Simple | Loop behavior |
+| `simple_test.asm` | Basic test program | Simple | Smoke testing |
 | `basic_operations.asm` | Fundamental operations | Medium | General testing |
 | `validation_suite.asm` | Comprehensive tests | Medium | Simulator validation |
 | `matrix_multiplication.asm` | 4×4 matrix multiply | Complex | Memory access patterns |
 | `bubble_sort.asm` | Bubble sort algorithm | Complex | Branch prediction |
 | `fibonacci_recursive.asm` | Recursive Fibonacci | Complex | Stack operations |
 | `memory_access_patterns.asm` | Various memory patterns | Complex | Cache analysis |
+| `integer/dhrystone_like.asm` | Integer-intensive loops & arrays | Complex | Steady-state IPC |
+| `integer/quicksort.asm` | Quicksort partitioning | Complex | Branch-heavy workloads |
+| `memory/streaming_access.asm` | Sequential & strided access | Complex | Cache behavior |
+| `mixed/compute_intensive.asm` | ALU + memory + branches | Complex | Realistic IPC |
 
 ---
 
@@ -161,22 +161,25 @@ print(f"Cycles: {results['cycles']}")
 - **Energy Per Instruction**: Energy efficiency
 
 ### Example Output
-```
-Simulation Summary:
-  Cycles: 245
-  Instructions: 180
-  IPC: 0.735
-  Branch Accuracy: 94.2%
-  Cache Hit Rate: 96.8%
-  
-Pipeline Utilization:
-  Fetch: 82.4%
-  Decode: 78.9%
-  Issue: 71.2%
-  Execute: 85.6%
-  Memory: 45.3%
-  Writeback: 73.1%
-```
+
+![Benchmark Comparison](../artifacts/benchmark_comparison.png)
+
+| Benchmark | IPC | Cycles | Branch Accuracy | Cache Hit Rate | EPI (pJ) |
+|-----------|-----|--------|-----------------|----------------|----------|
+| basic_operations | 0.620 | 10000 | 95.9% | 99.1% | 104925.4 |
+| bubble_sort | 0.923 | 10000 | 100.0% | 99.7% | 80930.7 |
+| fibonacci_recursive | 0.833 | 10000 | 96.7% | 80.3% | 87015.1 |
+| dhrystone_like | 0.781 | 8043 | 95.9% | 91.0% | 90897.3 |
+| quicksort | 0.946 | 10000 | 99.6% | 99.4% | 80525.6 |
+| matrix_multiplication | 0.921 | 38 | 0.0% | 0.0% | 80242.3 |
+| streaming_access | 0.876 | 10000 | 99.7% | 99.6% | 83988.4 |
+| memory_access_patterns | 0.889 | 10000 | 100.0% | 99.6% | 83946.0 |
+| compute_intensive | 0.739 | 2881 | 93.6% | 95.0% | 93901.1 |
+| simple_arithmetic | 0.604 | 48 | 76.9% | 0.0% | 100287.8 |
+| simple_fibonacci | 0.688 | 48 | 66.7% | 0.0% | 94089.1 |
+| simple_sort | 0.826 | 23 | 100.0% | 25.0% | 79600.2 |
+| simple_test | 0.667 | 9 | 0.0% | 0.0% | 79066.9 |
+| validation_suite | 0.826 | 10000 | 99.9% | 99.5% | 88478.3 |
 
 ---
 

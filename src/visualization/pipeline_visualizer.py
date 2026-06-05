@@ -288,7 +288,7 @@ class PipelineVisualizer:
         """Start the visualization animation."""
         self.animation = animation.FuncAnimation(  # type: ignore[assignment]
             self.fig,
-            self._animate,
+            self._animate,  # type: ignore[arg-type]
             interval=100,
             blit=False,  # type: ignore[arg-type]
         )

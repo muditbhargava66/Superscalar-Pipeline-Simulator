@@ -1,55 +1,43 @@
-# Pre-commit configuration for Superscalar Pipeline Simulator
-# Install: pre-commit install
+# Pre-commit hooks for Superscalar Pipeline Simulator
+# Install with: pre-commit install
 # Run manually: pre-commit run --all-files
 
 repos:
-  # Ruff - Linting and formatting (replaces black, isort, flake8)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.15
     hooks:
-      # Run the linter
       - id: ruff
-        args: [--fix]
-        types_or: [python, pyi, jupyter]
-      # Run the formatter
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(src|tests|main\.py)/
       - id: ruff-format
-        types_or: [python, pyi, jupyter]
+        files: ^(src|tests|main\.py)/
 
-  # MyPy - Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v1.20.0
     hooks:
       - id: mypy
         additional_dependencies:
-          - types-PyYAML
-          - types-psutil
-        args:
-          - --config-file=pyproject.toml
-          - --ignore-missing-imports
-        types: [python]
+          - types-PyYAML>=6.0.0
+          - pydantic>=2.0.0
+        args: [--ignore-missing-imports]
+        files: ^src/
 
-  # Check for common YAML issues
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.asm$
+      - id: end-of-file-fixer
+        exclude: \.asm$
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: check-ast
+
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.27.3
+    rev: 0.37.2
     hooks:
       - id: check-github-workflows
-        name: Check GitHub workflows
-        files: ^\.github/workflows/
-
-  # Check for merge conflicts
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
-    hooks:
-      - id: check-merge-conflict
-        name: Check for merge conflicts
-      - id: trailing-whitespace
-        name: Remove trailing whitespace
-      - id: end-of-file-fixer
-        name: Ensure files end with newline
-      - id: check-yaml
-        name: Validate YAML files
-        args: [--unsafe]
-      - id: check-toml
-        name: Validate TOML files
-      - id: detect-private-key
-        name: Check for private keys

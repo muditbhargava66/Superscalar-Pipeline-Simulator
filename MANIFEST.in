@@ -26,13 +26,6 @@ recursive-include examples *.py *.yaml *.asm *.md
 # Include tests
 recursive-include tests *.py
 
-# Exclude development and temporary files
-exclude fix_typing_imports.py
-exclude pipeline_fixes.py
-exclude run_validation.py
-exclude test_benchmarks.py
-exclude test_runner.py
-
 # Exclude report files (development artifacts)
 exclude simulation_results.txt
 exclude benchmark_validation_results.json

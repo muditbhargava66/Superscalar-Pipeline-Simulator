@@ -27,6 +27,13 @@ The Superscalar Pipeline Simulator is a comprehensive tool for simulating and an
 For easier configuration management, use the GUI tool:
 
 ```bash
+# Launch the GUI directly
+python main.py --gui
+
+# Or with a pre-selected benchmark
+python main.py --gui --benchmark benchmarks/simple_arithmetic.asm
+
+# Alternative: launch the GUI module directly
 python -c "import sys; sys.path.insert(0, 'src'); from gui.config_gui import main; main()"
 ```
 
@@ -36,6 +43,7 @@ The GUI provides:
 - Cache configuration
 - Simulation options
 - Load/save configuration files
+- **Run simulations directly** from the GUI with results displayed in a scrollable window
 
 ## Configuration
 
@@ -56,12 +64,19 @@ pipeline:
     LSU:
       count: 1
 
+execution:
+  enhanced_renaming: true
+  rename_bandwidth: 4
+  commit_bandwidth: 4
+  ooo_execution: false
+  ooo_window_size: 16
+
 branch_predictor:
-  type: gshare
+  type: tournament
   num_entries: 1024
   history_length: 8
 
-cache:
+memory:
   instruction_cache:
     size: 32768
     block_size: 64
@@ -90,11 +105,22 @@ debug:
 - **issue_width**: Instructions issued per cycle
 - **execute_units**: Number of each type of execution unit
 
+### Execution Configuration
+
+- **enhanced_renaming**: Enable advanced register renaming with reorder buffer
+- **rename_bandwidth**: Max instructions to rename per cycle (default 4)
+- **commit_bandwidth**: Max instructions to commit per cycle (default 4)
+- **ooo_execution**: Enable out-of-order execution in the execute stage
+- **ooo_window_size**: Instruction window size for OOO execution (default 16)
+
 ### Branch Predictor Options
 
 - **always_taken**: Simple predictor that always predicts taken
-- **bimodal**: Two-bit saturating counter predictor
-- **gshare**: Global history with shared pattern history table
+- **bimodal**: Two-bit saturating counter predictor indexed by branch PC
+- **gshare**: Global history XOR with branch address for pattern-based prediction
+- **tournament**: Meta-predictor chooses between Bimodal and GShare sub-predictors
+- **perceptron**: Neural network-based predictor using global history weights
+- **adaptive**: Dynamic switching between Tournament and Perceptron based on accuracy
 
 ### Cache Configuration
 
@@ -106,18 +132,37 @@ debug:
 
 ### Available Benchmarks
 
-1. **simple_arithmetic.asm**: Basic arithmetic operations and control flow
+#### Simple Benchmarks (Recommended for Testing)
+
+1. **simple_arithmetic.asm**: Basic arithmetic operations (ADD, SUB, AND, OR, XOR) and control flow
 2. **simple_sort.asm**: Simple sorting algorithm with comparisons and swaps
 3. **simple_fibonacci.asm**: Iterative Fibonacci calculation
-4. **basic_operations.asm**: Fundamental processor operations and control flow
-5. **memory_access_patterns.asm**: Various memory access patterns for cache analysis
+4. **simple_test.asm**: Basic test program for smoke testing
+
+#### Medium Complexity Benchmarks
+
+5. **basic_operations.asm**: Fundamental processor operations and control flow
 6. **validation_suite.asm**: Comprehensive test suite for simulator validation
 
-### Legacy Benchmarks (Complex)
+#### Complex / Legacy Benchmarks
 
-1. **matrix_multiplication.asm**: 4x4 matrix multiplication (requires parser enhancements)
-2. **bubble_sort.asm**: Bubble sort algorithm (requires parser enhancements)
-3. **fibonacci_recursive.asm**: Recursive Fibonacci (requires parser enhancements)
+7. **matrix_multiplication.asm**: 4×4 matrix multiplication (requires parser enhancements)
+8. **bubble_sort.asm**: Bubble sort algorithm (branch-heavy workload)
+9. **fibonacci_recursive.asm**: Recursive Fibonacci (stack operations)
+10. **memory_access_patterns.asm**: Various memory access patterns for cache analysis
+
+#### Integer Benchmarks (`benchmarks/integer/`)
+
+11. **integer/dhrystone_like.asm**: Integer-intensive workload with loops, arrays, and string-like ops (~200 instructions for steady-state IPC measurement)
+12. **integer/quicksort.asm**: Quicksort-like partitioning with branch-heavy workload (~150 instructions)
+
+#### Memory Benchmarks (`benchmarks/memory/`)
+
+13. **memory/streaming_access.asm**: Sequential, strided, and random-like memory access patterns for cache behavior measurement (~120 instructions)
+
+#### Mixed Benchmarks (`benchmarks/mixed/`)
+
+14. **mixed/compute_intensive.asm**: Mixes ALU, memory, and branch operations for realistic IPC measurement simulating scientific computation (~300 instructions)
 
 ### Creating Custom Benchmarks
 
@@ -179,28 +224,26 @@ When visualization is enabled, you'll see:
 
 ### Enhanced Command Line Interface
 
-The simulator now includes an enhanced command-line interface with comprehensive options:
+The simulator includes the following command-line options:
 
 ```bash
 python main.py [options]
 
 Configuration Options:
-  --config, -c CONFIG           Configuration file (default: config.yaml)
-  --generate-config FILE        Generate example configuration file
-  --validate-config FILE        Validate configuration file
+  --config, -c CONFIG           Configuration file (YAML)
 
 Simulation Options:
-  --benchmark, -b BENCH         Benchmark file to run
+  --benchmark, -b BENCH         Benchmark file to run (required)
   --output, -o OUTPUT           Output file for results
   --visualize                   Enable pipeline visualization
+  --gui                         Launch configuration GUI
 
 Profiling Options:
   --profile                     Enable performance profiling
-  --memory-profile              Enable memory profiling
 
 Debug Options:
   --debug                       Enable debug mode
-  --log-level LEVEL             Set logging level (DEBUG, INFO, WARNING, ERROR)
+  --max-cycles N                Maximum simulation cycles
 ```
 
 ### Enhanced Configuration Management
@@ -269,7 +312,7 @@ The project uses modern Python development tools:
   ```bash
   # Check code quality
   ruff check src/ tests/
-  
+
   # Format code
   ruff format src/ tests/
   ```
@@ -284,7 +327,7 @@ The project uses modern Python development tools:
   ```bash
   # Install hooks
   pre-commit install
-  
+
   # Run manually
   pre-commit run --all-files
   ```
@@ -331,6 +374,7 @@ The following benchmarks are tested and working with the current simulator:
 python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
 python main.py --benchmark benchmarks/simple_sort.asm --max-cycles 100
 python main.py --benchmark benchmarks/simple_fibonacci.asm --max-cycles 100
+python main.py --benchmark benchmarks/simple_test.asm --max-cycles 100
 
 # Complex benchmarks (advanced functionality)
 python main.py --benchmark benchmarks/basic_operations.asm --max-cycles 200
@@ -341,6 +385,12 @@ python main.py --benchmark benchmarks/bubble_sort.asm --max-cycles 200 --profile
 python main.py --benchmark benchmarks/fibonacci_recursive.asm --max-cycles 200 --profile
 python main.py --benchmark benchmarks/matrix_multiplication.asm --max-cycles 200 --profile
 python main.py --benchmark benchmarks/memory_access_patterns.asm --max-cycles 200 --profile
+
+# Subdirectory benchmarks (advanced workloads)
+python main.py --benchmark benchmarks/integer/dhrystone_like.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/integer/quicksort.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/memory/streaming_access.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/mixed/compute_intensive.asm --max-cycles 300 --profile
 ```
 
 ### Performance Analysis

@@ -17,6 +17,7 @@ from src.branch_prediction import (
     AlwaysTakenPredictor,
     BimodalPredictor,
     GsharePredictor,
+    TournamentPredictor,
 )
 from src.utils import BranchInstruction
 
@@ -258,6 +259,107 @@ class TestBranchPrediction(unittest.TestCase):
 
         pred = predictor.predict(branch)
         self.assertNotEqual(pred, branch.pc + 4)  # Now taken
+
+    def test_tournament_predictor_accuracy_warmup(self):
+        """Test tournament predictor accuracy with sufficient warmup (1000+ branches)."""
+        config = {
+            "predictor_1": {"size": 1024},
+            "predictor_2": {"size": 1024, "history_bits": 10},
+            "meta_bits": 10,
+        }
+        predictor = TournamentPredictor(config)
+
+        # Use multiple PCs with strongly biased patterns
+        import random
+
+        random.seed(42)
+        pcs = [0x100, 0x200, 0x300, 0x400, 0x500]
+        # Each PC has a bias: 0=mostly not taken, 1=mostly taken
+        bias = {0x100: 0.9, 0x200: 0.1, 0x300: 0.85, 0x400: 0.15, 0x500: 0.95}
+
+        # Warmup phase: 2000 branches
+        for _ in range(2000):
+            pc = random.choice(pcs)
+            taken = random.random() < bias[pc]
+            predictor.update(pc, taken)
+
+        # Test phase: 1000 branches, measure accuracy
+        correct = 0
+        total = 1000
+        for _ in range(total):
+            pc = random.choice(pcs)
+            taken = random.random() < bias[pc]
+            result = predictor.predict(pc)
+            if result.taken == taken:
+                correct += 1
+            predictor.update(pc, taken)
+
+        accuracy = (correct / total) * 100.0
+        self.assertGreater(accuracy, 85.0, f"Tournament accuracy {accuracy:.1f}% < 85%")
+
+        # Verify get_stats() returns valid data
+        stats = predictor.get_stats()
+        self.assertIn("accuracy", stats)
+        self.assertIn("predictor_1_accuracy", stats)
+        self.assertIn("predictor_2_accuracy", stats)
+        self.assertGreater(stats["predictions"], 0)
+
+    def test_bimodal_predictor_accuracy_warmup(self):
+        """Test standalone bimodal predictor accuracy with sufficient warmup."""
+        predictor = BimodalPredictor(num_entries=1024)
+
+        import random
+
+        random.seed(42)
+
+        # Create branches with biased behavior
+        branches = [
+            BranchInstruction(
+                address=0x100 + i * 0x40,
+                pc=0x100 + i * 0x40,
+                opcode="BEQ",
+                operands=["$t0", "$t1", "8"],
+            )
+            for i in range(10)
+        ]
+        # Bias per branch
+        bias = [0.9, 0.1, 0.85, 0.15, 0.95, 0.05, 0.8, 0.2, 0.7, 0.3]
+
+        # Warmup phase: 2000 branches (call predict before update to keep counters aligned)
+        for _ in range(2000):
+            idx = random.randint(0, len(branches) - 1)
+            branch = branches[idx]
+            taken = random.random() < bias[idx]
+            predictor.predict(branch)  # Increment total_predictions
+            predictor.update(branch, taken)
+
+        # Test phase: 1000 branches
+        correct = 0
+        total = 1000
+        for _ in range(total):
+            idx = random.randint(0, len(branches) - 1)
+            branch = branches[idx]
+            taken = random.random() < bias[idx]
+            pred_pc = predictor.predict(branch)
+            # predict() returns target PC if taken, pc+4 if not taken
+            predicted_taken = pred_pc != branch.pc + 4
+            if predicted_taken == taken:
+                correct += 1
+            predictor.update(branch, taken)
+
+        accuracy = (correct / total) * 100.0
+        self.assertGreater(accuracy, 80.0, f"Bimodal accuracy {accuracy:.1f}% < 80%")
+
+        # Verify get_accuracy() and get_statistics()
+        reported_accuracy = predictor.get_accuracy()
+        self.assertGreater(reported_accuracy, 0.0)
+        self.assertLessEqual(reported_accuracy, 100.0)
+        stats = predictor.get_statistics()
+        self.assertIn("total_predictions", stats)
+        self.assertIn("accuracy", stats)
+        self.assertEqual(
+            stats["total_predictions"], 3000
+        )  # 2000 warmup + 1000 test predict() calls
 
 
 if __name__ == "__main__":

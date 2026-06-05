@@ -51,14 +51,17 @@ class BimodalPredictor(BranchPredictor):
     ) -> None:
         index = pc & (self.size - 1)
 
+        # Capture prediction BEFORE updating counter
+        predicted_taken = self.table[index] >= 2
+
         if taken and self.table[index] < 3:
             self.table[index] += 1
         elif not taken and self.table[index] > 0:
             self.table[index] -= 1
 
-        # Update base statistics
+        # Update base statistics using pre-update prediction
         self.predictions += 1
-        if taken == (self.table[index] >= 2):
+        if predicted_taken == taken:
             self.correct_predictions += 1
         else:
             self.mispredictions += 1
@@ -97,6 +100,9 @@ class GSharePredictor(BranchPredictor):
         hist = history if history is not None else self.global_history
         index = (pc ^ hist) & (self.size - 1)
 
+        # Capture prediction BEFORE updating counter
+        predicted_taken = self.table[index] >= 2
+
         if taken and self.table[index] < 3:
             self.table[index] += 1
         elif not taken and self.table[index] > 0:
@@ -107,9 +113,9 @@ class GSharePredictor(BranchPredictor):
             (1 << self.history_bits) - 1
         )
 
-        # Update base statistics
+        # Update base statistics using pre-update prediction
         self.predictions += 1
-        if taken == (self.table[index] >= 2):
+        if predicted_taken == taken:
             self.correct_predictions += 1
         else:
             self.mispredictions += 1
@@ -184,14 +190,19 @@ class TournamentPredictor(BranchPredictor):
         metadata: dict | None = None,
     ) -> None:
         """Update all predictors and meta-predictor."""
+        # Get predictions BEFORE updating component predictors
+        pred1_result = self.predictor_1.predict(pc, history)
+        pred2_result = self.predictor_2.predict(pc, history)
+
+        # Determine what the meta-predictor chose BEFORE update
+        meta_index = pc & (self.meta_table_size - 1)
+        use_pred2 = self.meta_table[meta_index] >= 2
+
         # Update both component predictors
         self.predictor_1.update(pc, taken, target, history)
         self.predictor_2.update(pc, taken, target, history)
 
-        # Get what each predictor would have predicted
-        pred1_result = self.predictor_1.predict(pc, history)
-        pred2_result = self.predictor_2.predict(pc, history)
-
+        # Evaluate correctness of pre-update predictions
         pred1_correct = pred1_result.taken == taken
         pred2_correct = pred2_result.taken == taken
 
@@ -201,9 +212,7 @@ class TournamentPredictor(BranchPredictor):
         if pred2_correct:
             self.pred2_correct += 1
 
-        # Update meta-predictor
-        meta_index = pc & (self.meta_table_size - 1)
-
+        # Update meta-predictor based on which predictor was more accurate
         if pred1_correct and not pred2_correct:
             # Predictor 1 was better, decrement toward 0
             if self.meta_table[meta_index] > 0:
@@ -213,12 +222,12 @@ class TournamentPredictor(BranchPredictor):
             if self.meta_table[meta_index] < 3:
                 self.meta_table[meta_index] += 1
 
-        # Update base statistics
+        # Update base statistics using the chosen predictor's pre-update prediction
         self.predictions += 1
-        use_pred2 = self.meta_table[meta_index] >= 2
         chosen_correct = pred2_correct if use_pred2 else pred1_correct
         if chosen_correct:
             self.correct_predictions += 1
+            self.meta_correct += 1
         else:
             self.mispredictions += 1
 
@@ -399,14 +408,15 @@ class AdaptiveHybridPredictor(BranchPredictor):
         metadata: dict | None = None,
     ) -> None:
         """Update both predictors and adapt selection."""
-        # Update both predictors
+        # Capture predictions BEFORE updating
         tournament_pred = self.tournament.predict(pc, history)
         perceptron_pred = self.perceptron.predict(pc, history)
 
+        # Update both predictors
         self.tournament.update(pc, taken, target, history, metadata)
         self.perceptron.update(pc, taken, target, history, metadata)
 
-        # Track accuracy for adaptation
+        # Track accuracy for adaptation using pre-update predictions
         if tournament_pred.taken == taken:
             self.tournament_correct += 1
         if perceptron_pred.taken == taken:
@@ -433,14 +443,14 @@ class AdaptiveHybridPredictor(BranchPredictor):
             self.tournament_correct = 0
             self.perceptron_correct = 0
 
-        # Update base statistics
+        # Update base statistics using pre-update predictions
         self.predictions += 1
-        current_pred = (
-            self.perceptron.predict(pc, history)
+        current_correct = (
+            perceptron_pred.taken == taken
             if self.use_perceptron
-            else self.tournament.predict(pc, history)
+            else tournament_pred.taken == taken
         )
-        if current_pred.taken == taken:
+        if current_correct:
             self.correct_predictions += 1
         else:
             self.mispredictions += 1
