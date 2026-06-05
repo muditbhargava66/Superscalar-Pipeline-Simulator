@@ -611,15 +611,15 @@ class MIPSInstructionParser:
         if opcode in ["jr", "jalr"]:
             # Jump register instructions
             rs = self._parse_register(operands[0])
-            rd = (
+            jump_rd = (
                 self._parse_register(operands[1])
                 if len(operands) > 1 and opcode == "jalr"
                 else None
             )
 
             operands = [f"${rs}"]
-            if rd is not None:
-                operands.append(f"${rd}")
+            if jump_rd is not None:
+                operands.append(f"${jump_rd}")
 
             return Instruction(
                 opcode=opcode,

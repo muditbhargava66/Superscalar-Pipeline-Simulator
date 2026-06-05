@@ -103,11 +103,20 @@ class HazardController:
         self.completed_instructions: list[InstructionState] = []
 
         # Resource tracking
+        execute_units = pipeline_config.get("execute_units", {})
         self.functional_units = {
-            "ALU": pipeline_config.get("alu_units", 2),
-            "FPU": pipeline_config.get("fpu_units", 1),
-            "LSU": pipeline_config.get("lsu_units", 1),
-            "BRANCH": pipeline_config.get("branch_units", 1),
+            "ALU": execute_units.get("ALU", {}).get(
+                "count", pipeline_config.get("alu_units", 2)
+            ),
+            "FPU": execute_units.get("FPU", {}).get(
+                "count", pipeline_config.get("fpu_units", 1)
+            ),
+            "LSU": execute_units.get("LSU", {}).get(
+                "count", pipeline_config.get("lsu_units", 1)
+            ),
+            "BRANCH": execute_units.get("BRANCH", {}).get(
+                "count", pipeline_config.get("branch_units", 1)
+            ),
         }
         self.allocated_units: dict[str, set[int]] = {
             unit: set() for unit in self.functional_units
@@ -404,13 +413,7 @@ class HazardController:
             )
 
         elif current_stage == PipelineStage.ISSUE:
-            # Check if execution resources are available
-            required_unit = self._get_required_functional_unit(instr_state.instruction)
-            if required_unit:
-                return (
-                    len(self.allocated_units[required_unit])
-                    < self.functional_units[required_unit]
-                )
+            # Instruction already allocated resources when issued
             return True
 
         elif current_stage == PipelineStage.EXECUTE:
@@ -515,13 +518,17 @@ class HazardController:
             InstructionType.LOAD,
             InstructionType.STORE,
         ]:
-            # For memory: operands = [rt, "offset(rs)"] -> source is rs
+            # For memory: operands = [rt, "offset(rs)"] -> source is rs (and rt for store)
             if len(instruction.operands) >= 2:
                 # Parse "offset(rs)" format
                 addr_operand = instruction.operands[1]
                 if "(" in addr_operand:
                     rs_part = addr_operand.split("(")[1].rstrip(")")
                     src_regs.append(self._parse_register(rs_part))
+
+                # For STORE, the register being stored (rt) is also a source
+                if instruction.instruction_type == InstructionType.STORE:
+                    src_regs.append(self._parse_register(instruction.operands[0]))
         elif instruction.instruction_type == InstructionType.BRANCH:
             # For branch: operands = [rs, rt, target] -> sources are rs, rt
             if len(instruction.operands) >= 2:

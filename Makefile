@@ -1,6 +1,6 @@
 # Superscalar Pipeline Simulator - Makefile
 
-.PHONY: help install install-dev test lint format type-check clean build docs run-example pre-commit check benchmark docs-serve
+.PHONY: help install install-dev test lint format type-check clean build docs run-example pre-commit check benchmark docs-serve run-gui
 
 # Default target
 help:
@@ -10,42 +10,43 @@ help:
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "Installation:"
-	@echo "  install          Install the package in production mode"
-	@echo "  install-dev      Install with dev dependencies + pre-commit hooks"
+	@echo "  install          		Install the package in production mode"
+	@echo "  install-dev      		Install with dev dependencies + pre-commit hooks"
 	@echo ""
 	@echo "Testing:"
-	@echo "  test             Run the full test suite with coverage"
-	@echo "  test-fast        Run tests quickly (no coverage, stop on first failure)"
-	@echo "  test-coverage    Run tests with detailed coverage report"
+	@echo "  test             		Run the full test suite with coverage"
+	@echo "  test-fast        		Run tests quickly (no coverage, stop on first failure)"
+	@echo "  test-coverage    		Run tests with detailed coverage report"
 	@echo ""
 	@echo "Code Quality (Ruff + MyPy):"
-	@echo "  lint             Run code linting with ruff (auto-fix)"
-	@echo "  lint-check       Run code linting with ruff (check only)"
-	@echo "  format           Format code with ruff"
-	@echo "  format-check     Check code formatting with ruff"
-	@echo "  type-check       Run type checking with mypy"
-	@echo "  check            Run all checks (lint + format + type-check + test)"
-	@echo "  pre-commit       Run all pre-commit hooks"
+	@echo "  lint             		Run code linting with ruff (auto-fix)"
+	@echo "  lint-check       		Run code linting with ruff (check only)"
+	@echo "  format           		Format code with ruff"
+	@echo "  format-check     		Check code formatting with ruff"
+	@echo "  type-check       		Run type checking with mypy"
+	@echo "  check            		Run all checks (lint + format + type-check + test)"
+	@echo "  pre-commit       		Run all pre-commit hooks"
 	@echo ""
 	@echo "Build & Distribution:"
-	@echo "  build            Build distribution packages"
-	@echo "  clean            Clean build artifacts and cache files"
+	@echo "  build            		Build distribution packages"
+	@echo "  clean            		Clean build artifacts and cache files"
 	@echo ""
 	@echo "Documentation:"
-	@echo "  docs             Build documentation (Sphinx HTML)"
-	@echo "  docs-clean       Clean documentation build"
-	@echo "  docs-serve       Serve documentation locally on port 8000"
+	@echo "  docs             		Build documentation (Sphinx HTML)"
+	@echo "  docs-clean       		Clean documentation build"
+	@echo "  docs-serve       		Serve documentation locally on port 8000"
 	@echo ""
 	@echo "Examples:"
-	@echo "  run-example      Run basic arithmetic simulation"
-	@echo "  run-example-profile  Run simulation with profiling enabled"
+	@echo "  run-example      		Run basic arithmetic simulation"
+	@echo "  run-example-profile  	Run simulation with profiling enabled"
 	@echo "  run-example-visualize  Run simulation with visualization"
-	@echo "  benchmark        Run performance benchmarks"
+	@echo "  run-gui          		Launch configuration GUI"
+	@echo "  benchmark        		Run performance benchmarks"
 	@echo ""
 	@echo "CI/CD & Release:"
-	@echo "  ci-test          Run full CI test suite (lint + type-check + test)"
-	@echo "  pre-release      Run all checks and build package"
-	@echo "  dev              Quick development cycle (format + lint + test-fast)"
+	@echo "  ci-test          		Run full CI test suite (lint + type-check + test)"
+	@echo "  pre-release      		Run all checks and build package"
+	@echo "  dev              		Quick development cycle (format + lint + test-fast)"
 	@echo ""
 	@echo "Usage: make <target>"
 
@@ -78,23 +79,23 @@ test-coverage:
 # Code Quality (Ruff + MyPy)
 lint:
 	@echo "Running ruff linter (auto-fix)..."
-	python -m ruff check src/ tests/ --fix
+	python -m ruff check src/ tests/ main.py --fix
 
 lint-check:
 	@echo "Checking code with ruff..."
-	python -m ruff check src/ tests/
+	python -m ruff check src/ tests/ main.py
 
 format:
 	@echo "Formatting code with ruff..."
-	python -m ruff format src/ tests/
+	python -m ruff format src/ tests/ main.py
 
 format-check:
 	@echo "Checking code formatting with ruff..."
-	python -m ruff format --check src/ tests/
+	python -m ruff format --check src/ tests/ main.py
 
 type-check:
 	@echo "Running mypy type checker..."
-	python -m mypy src/
+	python -m mypy src/ main.py
 
 # Run all checks
 check: lint-check format-check type-check test
@@ -150,6 +151,10 @@ run-example-profile:
 run-example-visualize:
 	@echo "Running simulation with visualization..."
 	python main.py --benchmark benchmarks/simple_fibonacci.asm --visualize --max-cycles 200
+
+run-gui:
+	@echo "Launching configuration GUI..."
+	python main.py --gui --benchmark benchmarks/simple_arithmetic.asm
 
 benchmark:
 	@echo "Running performance benchmarks..."

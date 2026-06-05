@@ -262,45 +262,62 @@ class OutOfOrderExecuteStage(ExecuteStage):
 
     Adds:
     - Instruction window for better scheduling
-    - Dynamic instruction selection
+    - Priority-based dynamic instruction selection (oldest-first)
     - Result forwarding tracking
+    - Stall on window overflow instead of dropping instructions
     """
 
     def __init__(self, *args, window_size: int = 16, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.window_size = window_size
         self.instruction_window: List[Instruction] = []
+        self.stall_cycles = 0
 
     def execute(
         self, ready_instructions: List[Instruction]
     ) -> List[Tuple[Instruction, Any]]:
         """
         Execute with out-of-order scheduling from instruction window.
+
+        Uses oldest-first priority scheduling and stalls on window overflow
+        instead of dropping instructions.
         """
-        # Add new instructions to window
-        self.instruction_window.extend(ready_instructions)
+        # Stall if window is full - do not drop instructions
+        if len(self.instruction_window) >= self.window_size:
+            self.stall_cycles += 1
+            logging.debug(
+                f"OoO window full ({self.window_size}), stalling. "
+                f"New instructions will be accepted after window drains."
+            )
+            # Still check for completed instructions even while stalled
+            return self._check_completions()
 
-        # Limit window size
-        if len(self.instruction_window) > self.window_size:
-            # Remove oldest instructions that couldn't be scheduled
-            overflow = len(self.instruction_window) - self.window_size
-            removed = self.instruction_window[:overflow]
-            self.instruction_window = self.instruction_window[overflow:]
+        # Add new instructions to window (up to capacity)
+        available_slots = self.window_size - len(self.instruction_window)
+        added = 0
+        for instruction in ready_instructions:
+            if added >= available_slots:
+                break
+            if instruction is not None:
+                self.instruction_window.append(instruction)
+                added += 1
 
-            # Log window overflow
-            for inst in removed:
-                logging.warning(f"Instruction window overflow: dropping {inst}")
-
-        # Schedule instructions from window
+        # Schedule instructions from window using oldest-first priority
         scheduled_instructions = []
         remaining_instructions = []
 
-        for instruction in self.instruction_window:
+        # Sort by PC (oldest first) for priority-based selection
+        sorted_window = sorted(
+            self.instruction_window,
+            key=lambda inst: getattr(inst, "pc", 0),
+        )
+
+        for instruction in sorted_window:
             unit = self.find_free_functional_unit(instruction.opcode)
 
             if unit is not None:
                 try:
-                    result = unit.execute(instruction, self.register_file)
+                    unit.execute(instruction, self.register_file)
                     instruction.status = "executing"
                     instruction.assigned_unit = unit.id
                     scheduled_instructions.append(instruction)
@@ -314,10 +331,14 @@ class OutOfOrderExecuteStage(ExecuteStage):
             else:
                 remaining_instructions.append(instruction)
 
-        # Update instruction window
+        # Update instruction window (remove scheduled, keep remaining)
         self.instruction_window = remaining_instructions
 
         # Check for completed instructions
+        return self._check_completions()
+
+    def _check_completions(self) -> List[Tuple[Instruction, Any]]:
+        """Check functional units for completed instructions."""
         executed_instructions = []
         for unit in self.functional_units:
             completed = unit.update()
@@ -329,7 +350,6 @@ class OutOfOrderExecuteStage(ExecuteStage):
                 self.executed_count += 1
 
         self.stats.update_cycle()
-
         return executed_instructions
 
     def get_window_status(self) -> dict[str, Any]:
@@ -338,5 +358,6 @@ class OutOfOrderExecuteStage(ExecuteStage):
             "window_size": self.window_size,
             "current_occupancy": len(self.instruction_window),
             "utilization": len(self.instruction_window) / self.window_size * 100,
+            "stall_cycles": self.stall_cycles,
             "instructions": [str(inst) for inst in self.instruction_window],
         }

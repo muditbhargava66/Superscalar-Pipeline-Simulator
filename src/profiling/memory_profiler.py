@@ -107,7 +107,7 @@ class MemoryProfiler:
         memory_info = self._process.memory_info()
 
         # Get Python-specific memory info
-        python_memory = 0
+        python_memory: float = 0.0
         if self._tracemalloc_started:
             current, peak = tracemalloc.get_traced_memory()
             python_memory = current / 1024 / 1024  # Convert to MB

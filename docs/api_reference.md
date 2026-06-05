@@ -35,12 +35,25 @@ validated_config = config_manager.validate_config(config)
 Pydantic model for type-safe configuration validation.
 
 ```python
-from config.config_models import SimulatorConfig, PipelineConfig
+from config.config_models import SimulatorConfig
 
-config = SimulatorConfig(
-    pipeline=PipelineConfig(width=8, depth=7),
-    cache={'l1d_size': 64, 'l2_size': 512}
-)
+# Load configuration from YAML file
+from config.config_manager import ConfigManager
+config_manager = ConfigManager()
+config = config_manager.load_config('config.yaml')
+
+# Or build configuration programmatically
+config = {
+    'pipeline': {
+        'num_stages': 6,
+        'fetch_width': 8,
+        'issue_width': 6,
+    },
+    'memory': {
+        'instruction_cache': {'size': '32KB', 'block_size': 64, 'associativity': 4},
+        'data_cache': {'size': '32KB', 'block_size': 64, 'associativity': 4},
+    },
+}
 ```
 
 ### Instruction Processing
@@ -103,7 +116,7 @@ class CustomPredictor(BranchPredictor):
     def predict(self, pc: int) -> PredictionResult:
         # Implementation
         pass
-    
+
     def update(self, pc: int, taken: bool) -> None:
         # Implementation
         pass
@@ -156,25 +169,54 @@ Advanced cache implementation with detailed timing and statistics.
 from cache.enhanced_cache import EnhancedCache, MemoryAccessType
 
 config = {
-    'size': 32768,
+    'cache_size': 32768,
     'block_size': 64,
     'associativity': 4,
-    'replacement_policy': 'lru'
+    'hit_latency': 1,
+    'miss_penalty': 10,
 }
 cache = EnhancedCache(config)
 
 # Access cache
-hit, latency, data = cache.access(
+result = cache.access(
     address=0x1000,
     access_type=MemoryAccessType.READ
 )
 ```
 
 **Methods:**
-- `access(address: int, access_type: MemoryAccessType) -> tuple[bool, int, int]`: Access cache
-- `advance_cycle() -> list[MemoryRequest]`: Advance one cycle
-- `get_stats() -> dict`: Get cache statistics
+
+- `access(address: int, access_type: MemoryAccessType) -> tuple`: Access cache, returns hit status, latency, and data
+- `advance_cycle() -> list`: Advance one cycle, returns completed memory requests
+- `get_statistics() -> dict`: Get cache statistics including hit rate, miss rate, and access counts
 - `reset_stats() -> None`: Reset statistics
+
+#### `cache.enhanced_cache.MemoryHierarchy`
+
+Multi-level memory hierarchy with L1, L2, and main memory integration.
+
+```python
+from cache.enhanced_cache import MemoryHierarchy
+
+l1_config = {
+    'cache_size': 32768,
+    'block_size': 64,
+    'associativity': 4,
+    'hit_latency': 1,
+    'miss_penalty': 10,
+}
+hierarchy = MemoryHierarchy(l1_config, memory_latency=100)
+
+# Advance cycle and get statistics
+hierarchy.advance_cycle()
+stats = hierarchy.get_statistics()
+```
+
+**Methods:**
+
+- `access(address: int, access_type: str, data: int = 0) -> tuple`: Access through hierarchy
+- `advance_cycle() -> None`: Advance one cycle for pending requests
+- `get_statistics() -> dict`: Get hierarchy-wide statistics including L1/L2 hit rates
 
 #### `cache.non_blocking_cache.NonBlockingCache`
 
@@ -325,8 +367,9 @@ Comprehensive exception hierarchy for error handling.
 
 ```python
 from exceptions.simulator_exceptions import (
-    SimulatorException, ConfigurationError, InstructionParseError,
-    PipelineStallException, CacheException, ExecutionException
+    SimulatorError, ConfigurationError, InstructionError,
+    PipelineStallError, CacheError, ExecutionError,
+    MemoryAccessError, handle_simulator_error, create_error_context,
 )
 
 try:
@@ -334,25 +377,62 @@ try:
     pass
 except ConfigurationError as e:
     print(f"Configuration error: {e}")
-    print(f"Context: {e.context}")
-except InstructionParseError as e:
-    print(f"Parse error at line {e.line_number}: {e.instruction}")
-except PipelineStallException as e:
-    print(f"Pipeline stall in {e.stage} at cycle {e.cycle}")
-except SimulatorException as e:
+    print(f"Details: {e.details}")
+except InstructionError as e:
+    print(f"Instruction error: {e.instruction}")
+except PipelineStallError as e:
+    print(f"Pipeline stall: {e.stall_reason}")
+except SimulatorError as e:
     print(f"Simulator error: {e}")
 ```
 
 **Exception Types:**
-- `SimulatorException`: Base exception class
+- `SimulatorError`: Base exception class for all simulator errors
 - `ConfigurationError`: Configuration validation errors
-- `InstructionParseError`: Assembly parsing errors
-- `PipelineStallException`: Pipeline stall conditions
-- `CacheException`: Cache-related errors
-- `ExecutionException`: Instruction execution errors
-- `MemoryException`: Memory access violations
-- `RegisterFileException`: Register file errors
+- `InstructionError`: Assembly parsing and instruction format errors
+- `PipelineError`: Base class for pipeline-related errors (with stage and cycle info)
+- `PipelineStallError`: Pipeline stall conditions (with stall reason)
+- `HazardError`: Unresolvable data/control/structural hazards
+- `CacheError`: Cache-related errors (with cache type info)
+- `ExecutionError`: Instruction execution errors (with unit type and operation)
+- `MemoryError`: Base class for memory system errors
+- `MemoryAccessError`: Memory access violations (with address and access type)
 - `BranchPredictionError`: Branch predictor errors
+- `RegisterFileError`: Register file errors
+- `ValidationError`: Input validation and state validation failures
+
+### Performance Counters
+
+#### `performance.performance_counters.PerformanceCounters`
+
+Detailed performance counters for pipeline analysis.
+
+```python
+from performance.performance_counters import PerformanceCounters
+
+counters = PerformanceCounters()
+
+# Record cycle activity
+counters.record_cycle(instructions_issued=2, instructions_in_flight=5)
+
+# Update from component statistics
+counters.update_from_hazard_controller(hazard_stats)
+counters.update_from_execution_engine(exec_stats)
+counters.update_from_memory_hierarchy(memory_stats)
+counters.update_from_branch_predictor(predictor)
+
+# Get comprehensive report
+report = counters.get_detailed_report()
+```
+
+**Methods:**
+
+- `record_cycle(instructions_issued: int, instructions_in_flight: int) -> None`: Record per-cycle activity
+- `update_from_hazard_controller(stats: dict) -> None`: Import hazard controller statistics
+- `update_from_execution_engine(stats: dict) -> None`: Import execution engine statistics
+- `update_from_memory_hierarchy(stats: dict) -> None`: Import memory hierarchy statistics
+- `update_from_branch_predictor(predictor) -> None`: Import branch predictor statistics
+- `get_detailed_report() -> dict`: Get comprehensive performance report
 
 ## Usage Patterns
 
@@ -385,31 +465,20 @@ metrics = profiler.get_performance_metrics()
 ### Advanced Configuration
 
 ```python
-from config.config_models import SimulatorConfig, PipelineConfig, CacheConfig
+from config.config_manager import ConfigManager
 
-# Create custom configuration
-config = SimulatorConfig(
-    pipeline=PipelineConfig(
-        width=8,
-        depth=7,
-        fetch_width=8,
-        issue_width=6
-    ),
-    cache=CacheConfig(
-        l1d_size=64,
-        l2_size=512,
-        block_size=128,
-        associativity=8
-    ),
-    branch_predictor={
-        'type': 'tournament',
-        'size': 2048,
-        'history_length': 12
-    }
-)
+# Load and customize configuration
+config_manager = ConfigManager()
+config = config_manager.load_config('config.yaml')
 
-# Validate and use
-validated_config = config_manager.validate_config(config.dict())
+# Override specific settings
+config['pipeline']['issue_width'] = 6
+config['execution']['rename_bandwidth'] = 8
+config['branch_predictor']['type'] = 'tournament'
+config['simulation']['max_cycles'] = 50000
+
+# Use with simulator
+simulator = SuperscalarSimulator('config.yaml')
 ```
 
 ### Performance Analysis
@@ -435,28 +504,27 @@ for benchmark, result in results.items():
 ### Error Handling Best Practices
 
 ```python
-from exceptions.simulator_exceptions import handle_simulator_error
+from exceptions.simulator_exceptions import SimulatorError, handle_simulator_error
 import logging
 
 logger = logging.getLogger(__name__)
 
 try:
     # Simulation code
-    simulator.run()
-except SimulatorException as e:
+    simulator.run_simulation()
+except SimulatorError as e:
     error_info = handle_simulator_error(e, logger)
-    
+
     # Log structured error information
     logger.error(f"Simulation failed: {error_info['message']}")
     logger.debug(f"Error details: {error_info['details']}")
-    
+
     # Take appropriate action based on error type
-    if error_info['recoverable']:
+    if error_info['details'].get('recoverable'):
         # Attempt recovery
-        simulator.reset_state()
+        pass
     else:
         # Terminate gracefully
-        simulator.cleanup()
         raise
 ```
 

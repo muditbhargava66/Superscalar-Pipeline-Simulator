@@ -45,8 +45,9 @@ from branch_prediction.gshare_predictor import GsharePredictor
 from cache.cache import DataCache, InstructionCache, Memory
 from cache.enhanced_cache import EnhancedCache, MemoryAccessType, MemoryHierarchy
 from data_forwarding.data_forwarding_unit import DataForwardingUnit
+from performance.performance_counters import PerformanceCounters
 from pipeline.decode_stage import DecodeStage
-from pipeline.execute_stage import ExecuteStage
+from pipeline.execute_stage import ExecuteStage, OutOfOrderExecuteStage
 from pipeline.fetch_stage import FetchStage
 from pipeline.hazard_controller import HazardController
 from pipeline.issue_stage import IssueStage
@@ -54,7 +55,7 @@ from pipeline.memory_access_stage import MemoryAccessStage
 from pipeline.write_back_stage import WriteBackStage
 from register_file.register_file import RegisterFile
 from register_file.register_renaming import AdvancedRegisterRenaming
-from utils.execution_engine import CycleAccurateExecutionEngine
+from utils.execution_engine import CycleAccurateExecutionEngine, ExecutionResult
 from utils.instruction import Instruction, InstructionType
 from utils.instruction_parser import MIPSInstructionParser
 from utils.scoreboard import Scoreboard
@@ -69,8 +70,13 @@ try:
         create_error_context,
         handle_simulator_error,
     )
+    from gui.config_gui import ConfigurationGUI
     from profiling import MemoryProfiler, PerformanceProfiler
-    from visualization.pipeline_visualizer import PipelineVisualizer
+    from visualization.pipeline_visualizer import (
+        PipelineSnapshot,
+        PipelineVisualizer,
+        create_performance_dashboard,
+    )
 
     ENHANCED_FEATURES = True
 except ImportError:
@@ -184,7 +190,7 @@ class SuperscalarSimulator:
         )
         self.logger = logging.getLogger("simulator")
 
-    def _parse_size(self, size_str: str) -> int:
+    def _parse_size(self, size_str: str | int) -> int:
         """Parse size string like '32KB' to integer bytes."""
         if isinstance(size_str, int):
             return size_str
@@ -236,8 +242,25 @@ class SuperscalarSimulator:
 
             # Enhanced register file with renaming
             self.register_file = RegisterFile(32)
+
+            # Enhanced register renaming with bandwidth support
+            renaming_config = self.config.get("execution", {}).get(
+                "register_renaming", {}
+            )
+            rename_bw = renaming_config.get(
+                "rename_bandwidth",
+                self.config.get("execution", {}).get("rename_bandwidth", 4),
+            )
+            commit_bw = renaming_config.get(
+                "commit_bandwidth",
+                self.config.get("execution", {}).get("commit_bandwidth", 4),
+            )
             self.register_renaming = AdvancedRegisterRenaming(
-                num_logical_regs=32, num_physical_regs=128, reorder_buffer_size=64
+                num_logical_regs=32,
+                num_physical_regs=128,
+                reorder_buffer_size=64,
+                rename_bandwidth=rename_bw,
+                commit_bandwidth=commit_bw,
             )
 
             # Branch predictor
@@ -257,7 +280,10 @@ class SuperscalarSimulator:
 
             # Cycle-accurate execution engine
             self.execution_engine = CycleAccurateExecutionEngine(
-                self.register_file, self.memory, self.data_cache
+                self.register_file,
+                self.memory,
+                self.data_cache,
+                memory_hierarchy=self.memory_hierarchy,
             )
 
             # Enhanced branch prediction
@@ -287,7 +313,7 @@ class SuperscalarSimulator:
 
             # Non-blocking cache support
             if self.config.get("memory", {}).get("non_blocking_cache", False):
-                from src.cache.non_blocking_cache import NonBlockingCache
+                from cache.non_blocking_cache import NonBlockingCache
 
                 cache_config = self.config.get("memory", {}).get("data_cache", {})
                 # Convert cache config to proper format
@@ -300,27 +326,27 @@ class SuperscalarSimulator:
                     "mshr_count": cache_config.get("mshr_count", 8),
                     "write_policy": cache_config.get("write_policy", "write_back"),
                 }
-                self.data_cache = NonBlockingCache(nb_cache_config)
+                self.data_cache = NonBlockingCache(nb_cache_config)  # type: ignore[assignment]
 
             # Enhanced register renaming
             if self.config.get("execution", {}).get("enhanced_renaming", True):
-                from src.register_file.enhanced_register_renaming import (
+                from register_file.enhanced_register_renaming import (
                     EnhancedRegisterRenaming,
                 )
 
                 renaming_config = self.config.get("execution", {}).get(
                     "register_renaming", {}
                 )
-                self.register_renaming = EnhancedRegisterRenaming(renaming_config)
+                self.register_renaming = EnhancedRegisterRenaming(renaming_config)  # type: ignore[assignment]
 
             # Power modeling
             if self.config.get("power_modeling", {}).get("enabled", False):
-                from src.profiling.power_model import ProcessorPowerModel
+                from profiling.power_model import ProcessorPowerModel
 
                 power_config = self.config.get("power_modeling", {})
-                self.power_model = ProcessorPowerModel(power_config)
+                self.power_model: Any = ProcessorPowerModel(power_config)
             else:
-                self.power_model = None
+                self.power_model = None  # type: ignore[assignment]
 
             # Pipeline stages
             self._initialize_pipeline_stages()
@@ -399,14 +425,32 @@ class SuperscalarSimulator:
             execution_units=processed_execute_units,
         )
 
-        self.execute_stage = ExecuteStage(
-            num_alu_units=alu_count,
-            num_fpu_units=fpu_count,
-            num_lsu_units=lsu_count,
-            register_file=self.register_file,
-            data_cache=self.data_cache,
-            memory=self.memory,
-        )
+        # Use OOO execute stage if configured
+        ooo_enabled = self.config.get("execution", {}).get("ooo_execution", False)
+        ooo_window_size = self.config.get("execution", {}).get("ooo_window_size", 16)
+
+        if ooo_enabled:
+            self.execute_stage: ExecuteStage = OutOfOrderExecuteStage(
+                num_alu_units=alu_count,
+                num_fpu_units=fpu_count,
+                num_lsu_units=lsu_count,
+                register_file=self.register_file,
+                data_cache=self.data_cache,
+                memory=self.memory,
+                window_size=ooo_window_size,
+            )
+            self.logger.info(
+                f"OOO execution enabled with window size {ooo_window_size}"
+            )
+        else:
+            self.execute_stage = ExecuteStage(
+                num_alu_units=alu_count,
+                num_fpu_units=fpu_count,
+                num_lsu_units=lsu_count,
+                register_file=self.register_file,
+                data_cache=self.data_cache,
+                memory=self.memory,
+            )
 
         self.memory_access_stage = MemoryAccessStage(
             data_cache=self.data_cache, memory=self.memory
@@ -442,7 +486,7 @@ class SuperscalarSimulator:
             for i, instruction in enumerate(self.parsed_instructions):
                 address = i * 4
                 # Store instruction in cache (simplified)
-                self.instruction_cache.add_instruction(address, instruction)
+                self.instruction_cache.add_instruction(address, instruction)  # type: ignore[arg-type]
 
         except Exception as e:
             self.logger.error(f"Failed to load program {program_file}: {e}")
@@ -510,6 +554,16 @@ class SuperscalarSimulator:
 
         self.logger.info(f"Running enhanced simulation for up to {max_cycles} cycles")
 
+        # Initialize performance counters for detailed tracking
+        perf_counters = PerformanceCounters()
+
+        # Visualization: feed snapshots periodically
+        viz_enabled = self.visualizer is not None
+        viz_interval = 10  # Feed snapshot every N cycles
+
+        # Track branch instructions for predictor updates
+        branch_instructions: dict[int, Instruction] = {}
+
         # Enhanced simulation loop with cycle-accurate execution
         while cycles < max_cycles and pc < len(
             getattr(self, "parsed_instructions", [])
@@ -535,8 +589,21 @@ class SuperscalarSimulator:
                 self.register_renaming.complete_instruction(instr_id, None)
 
             # Try to issue new instruction
+            instructions_issued_this_cycle = 0
             if pc < len(getattr(self, "parsed_instructions", [])):
                 instruction = self.parsed_instructions[pc]
+
+                # Branch prediction: predict when encountering a branch/jump
+                if instruction.instruction_type in [
+                    InstructionType.BRANCH,
+                    InstructionType.JUMP,
+                ]:
+                    try:
+                        self.branch_predictor.predict(instruction.address)
+                    except Exception:
+                        pass
+                    # Track for later update
+                    branch_instructions[instruction_id] = instruction
 
                 # Try to issue instruction through hazard controller
                 if self.hazard_controller.issue_instruction(
@@ -557,12 +624,74 @@ class SuperscalarSimulator:
 
                         pc += 1
                         instruction_id += 1
+                        instructions_issued_this_cycle = 1
+
+            # Record cycle in performance counters
+            in_flight = len(self.execution_engine.executing_instructions)
+            perf_counters.record_cycle(
+                instructions_issued=instructions_issued_this_cycle,
+                instructions_in_flight=in_flight,
+            )
 
             # Advance execution engine
             completed_executions = self.execution_engine.advance_cycle()
             for exec_id, result, data in completed_executions:
-                # Execution engine completion is separate from pipeline completion
-                pass
+                # Update branch predictor with actual outcome
+                if exec_id in branch_instructions:
+                    branch_instr = branch_instructions[exec_id]
+                    actually_taken = result == ExecutionResult.BRANCH_TAKEN
+
+                    try:
+                        self.branch_predictor.update(
+                            branch_instr.address, actually_taken
+                        )
+                    except Exception:
+                        pass
+
+                    # Fix: Handle branch/jump by updating PC
+                    if actually_taken or branch_instr.instruction_type == InstructionType.JUMP:
+                        # Target address is returned in `data`
+                        if isinstance(data, int):
+                            target_pc = data // 4  # Convert byte address to instruction index
+                            if target_pc != pc:
+                                pc = target_pc
+                                self.logger.debug(f"Branch/Jump taken, redirecting PC to {pc}")
+                                # TODO : In a real superscalar pipeline, we would flush here
+                                # self.hazard_controller.flush()
+                                # self.execution_engine.flush()
+                                # self.register_renaming.flush()
+
+            # Feed visualization snapshot periodically
+            if (
+                viz_enabled
+                and self.visualizer is not None
+                and cycles % viz_interval == 0
+            ):
+                ipc_now = instructions_completed / cycles if cycles > 0 else 0
+                snapshot = PipelineSnapshot(
+                    cycle=cycles,
+                    fetch=[
+                        f"PC={pc}"
+                        if pc < len(getattr(self, "parsed_instructions", []))
+                        else ""
+                    ],
+                    decode=[],
+                    issue=[],
+                    execute=[
+                        str(e[0])
+                        for e in list(
+                            self.execution_engine.executing_instructions.items()
+                        )[:4]
+                    ],
+                    memory=[],
+                    writeback=[],
+                    branch_prediction_accuracy=self._calculate_branch_accuracy(),
+                    ipc=ipc_now,
+                    stalls=0,
+                    cache_hits=0,
+                    cache_misses=0,
+                )
+                self.visualizer.update(snapshot)
 
             # Debug output every 100 cycles
             if self.config["debug"]["enabled"] and cycles % 100 == 0:
@@ -575,8 +704,8 @@ class SuperscalarSimulator:
 
         # Gather comprehensive statistics
         execution_stats = (
-            self.execution_engine.get_stats()
-            if hasattr(self.execution_engine, "get_stats")
+            self.execution_engine.get_statistics()
+            if hasattr(self.execution_engine, "get_statistics")
             else {}
         )
         hazard_stats = (
@@ -585,14 +714,14 @@ class SuperscalarSimulator:
             else {}
         )
         renaming_stats = (
-            self.register_renaming.get_stats()
-            if hasattr(self.register_renaming, "get_stats")
+            self.register_renaming.get_statistics()
+            if hasattr(self.register_renaming, "get_statistics")
             else {}
         )
         memory_stats = (
-            self.memory_hierarchy.get_stats()
-            if hasattr(self.memory_hierarchy, "get_stats")
-            else {"l1_stats": {"hit_rate": 0.95}}
+            self.memory_hierarchy.get_statistics()
+            if hasattr(self.memory_hierarchy, "get_statistics")
+            else {"l1_stats": {"hit_rate": 0.0}}
         )
 
         # Calculate enhanced performance metrics
@@ -603,18 +732,35 @@ class SuperscalarSimulator:
             hazard_stats, cycles
         )
 
+        # Calculate branch accuracy from actual branch predictor stats
+        branch_accuracy = self._calculate_branch_accuracy()
+
+        # Calculate cache hit rate from memory hierarchy stats
+        l1_stats = memory_stats.get("l1_stats", {})
+        cache_hit_rate = l1_stats.get("hit_rate", 0.0) * 100
+
         results = {
             "cycles": cycles,
             "instructions": instructions_completed,
             "ipc": ipc,
-            "branch_accuracy": hazard_stats.get("branch_accuracy", 90.0),
-            "cache_hit_rate": memory_stats["l1_stats"]["hit_rate"] * 100,
+            "branch_accuracy": branch_accuracy,
+            "cache_hit_rate": cache_hit_rate,
             "execution_stats": execution_stats,
             "hazard_stats": hazard_stats,
             "renaming_stats": renaming_stats,
             "memory_stats": memory_stats,
             "pipeline_utilization": pipeline_utilization,
         }
+
+        # Update performance counters with final stats
+        perf_counters.update_from_hazard_controller(hazard_stats)
+        perf_counters.update_from_execution_engine(execution_stats)
+        perf_counters.update_from_memory_hierarchy(memory_stats)
+        if hasattr(self, "branch_predictor"):
+            perf_counters.update_from_branch_predictor(self.branch_predictor)
+
+        # Add performance counters detailed report to results
+        results["performance_counters"] = perf_counters.get_detailed_report()
 
         # Add power modeling results if enabled
         if self.power_model:
@@ -632,10 +778,42 @@ class SuperscalarSimulator:
             )
 
         # Add enhanced branch prediction stats
-        if hasattr(self.branch_predictor, "get_stats"):
+        if hasattr(self.branch_predictor, "get_statistics"):
+            results["branch_prediction_stats"] = self.branch_predictor.get_statistics()
+        elif hasattr(self.branch_predictor, "get_stats"):
             results["branch_prediction_stats"] = self.branch_predictor.get_stats()
 
         return results
+
+    def _calculate_branch_accuracy(self) -> float:
+        """
+        Calculate branch prediction accuracy from actual predictor statistics.
+
+        Returns:
+            Branch accuracy as a percentage (0.0-100.0)
+        """
+        predictor = self.branch_predictor
+
+        # Try multiple interfaces that different predictors expose
+        if hasattr(predictor, "get_accuracy"):
+            try:
+                accuracy = predictor.get_accuracy()
+                # get_accuracy() may return 0.0-1.0 or 0.0-100.0
+                if 0.0 <= accuracy <= 1.0:
+                    return accuracy * 100.0
+                return float(accuracy)
+            except Exception:
+                pass
+
+        if hasattr(predictor, "total_predictions") and hasattr(
+            predictor, "total_mispredictions"
+        ):
+            total = predictor.total_predictions
+            if total > 0:
+                correct = total - predictor.total_mispredictions
+                return (correct / total) * 100.0
+
+        return 0.0
 
     def _get_functional_unit_for_instruction(self, instruction: Instruction) -> str:
         """Get the functional unit type for an instruction."""
@@ -802,6 +980,8 @@ Examples:
 
     parser.add_argument("--max-cycles", type=int, help="Maximum simulation cycles")
 
+    parser.add_argument("--gui", action="store_true", help="Launch configuration GUI")
+
     return parser
 
 
@@ -809,6 +989,26 @@ def main() -> int:
     """Main entry point."""
     parser = create_argument_parser()
     args = parser.parse_args()
+
+    # Launch GUI if requested
+    if args.gui:
+        if not ENHANCED_FEATURES:
+            print(
+                "Error: GUI requires enhanced features (tkinter). Install with: pip install -r requirements.txt"
+            )
+            return 1
+        try:
+            app = ConfigurationGUI()
+            app.run()
+            return 0
+        except ImportError:
+            print("Error: tkinter not available. Install with:")
+            print("  Ubuntu/Debian: sudo apt-get install python3-tk")
+            print("  macOS: tkinter should be included with Python")
+            return 1
+        except Exception as e:
+            print(f"Error running GUI: {e}")
+            return 1
 
     try:
         # Create simulator
@@ -832,9 +1032,21 @@ def main() -> int:
 
         output_file = args.output or simulator.config["simulation"]["output_file"]
 
+        # Start visualization if enabled
+        if simulator.visualizer:
+            simulator.visualizer.start()
+
         # Load and run program
         simulator.load_program(args.benchmark)
         results = simulator.run_simulation()
+
+        # Stop visualization and show dashboard if enabled
+        if simulator.visualizer:
+            simulator.visualizer.stop()
+            try:
+                create_performance_dashboard(results)
+            except Exception:
+                pass  # Dashboard is optional, don't fail on display issues
 
         # Save results
         simulator.save_results(results, output_file)

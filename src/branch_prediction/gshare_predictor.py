@@ -224,7 +224,9 @@ class GsharePredictor:
             "accuracy": self.get_accuracy(),
             "history_register": bin(self.history_register),
             "counter_distribution": counter_distribution,
-            "table_utilization": len(set(self.branch_history[-1000:]))
+            "table_utilization": len(
+                set(entry["pc"] for entry in self.branch_history[-1000:])
+            )
             / self.num_entries
             * 100
             if self.branch_history

@@ -2,11 +2,11 @@
 
 # Superscalar Pipeline Simulator
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Tests](https://img.shields.io/badge/tests-92%20passing-green.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)
+[![Tests](https://img.shields.io/badge/tests-139%20passing-green.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen.svg)](docs/)
 
 > Superscalar pipeline simulator for computer architecture research and education. Features branch prediction, non-blocking cache systems, power modeling, and cycle-accurate simulation capabilities.
@@ -22,9 +22,9 @@
 <td width="50%">
 
 ### Research Platform
-- **Tournament Branch Prediction** - Hybrid predictors achieving >95% accuracy
+- **6 Branch Predictors** - Always Taken, Bimodal, GShare, Tournament, Perceptron, Adaptive Hybrid
 - **Non-blocking Cache System** - MSHR-based with up to 8 outstanding misses
-- **Enhanced Register Renaming** - 64-entry ROB with precise exception handling
+- **Enhanced Register Renaming** - 64-entry ROB with configurable bandwidth (4/cycle)
 - **Power & Energy Modeling** - Component-level analysis with thermal effects
 - **Error Handling** - Structured exceptions with recovery guidance
 
@@ -40,7 +40,7 @@
 
 ### Development Tools
 - **Complete Example Suite** - 5 demonstrations of all features
-- **Working Benchmark Suite** - 9 tested assembly programs for evaluation
+- **Working Benchmark Suite** - 14 tested assembly programs for evaluation
 - **Type-Safe Configuration** - Pydantic validation with environment overrides
 - **Modern Python API** - Full 3.10+ compatibility with comprehensive type hints
 - **Documentation** - API reference, guides, and tutorials
@@ -48,8 +48,8 @@
 ### Capabilities
 - **Performance Analysis** - Bottleneck identification and optimization recommendations
 - **Cycle-Accurate Simulation** - Precise timing models for analysis
-- **Thermal Modeling** - Temperature-aware simulation with leakage scaling
-- **Energy Efficiency Metrics** - EPI calculations and power breakdown analysis
+- **Live Visualization** - Real-time pipeline state display with matplotlib
+- **Configuration GUI** - Tkinter-based interactive config editor
 - **Machine Learning Integration** - Advanced predictors with adaptive algorithms
 
 </td>
@@ -70,6 +70,13 @@ git clone https://github.com/muditbhargava66/superscalar-pipeline-simulator.git 
 # Run a simple benchmark
 python main.py --benchmark benchmarks/simple_arithmetic.asm --max-cycles 100
 
+# Run with live visualization
+python main.py --benchmark benchmarks/simple_fibonacci.asm --visualize --max-cycles 200
+
+# Launch the configuration GUI
+make run-gui
+# Or manually: python main.py --gui --benchmark benchmarks/simple_arithmetic.asm
+
 # Try advanced features
 python examples/advanced_pipeline_features.py
 
@@ -89,6 +96,9 @@ python main.py --benchmark benchmarks/bubble_sort.asm --max-cycles 200 --profile
 
 # Recursive function calls
 python main.py --benchmark benchmarks/fibonacci_recursive.asm --max-cycles 200
+
+# Run with debug output
+python main.py --benchmark benchmarks/matrix_multiplication.asm --debug --max-cycles 300
 ```
 
 ### Advanced Analysis
@@ -105,25 +115,24 @@ python examples/configuration_management.py
 
 ### Python API
 ```python
-from config.config_manager import ConfigManager
-from simulator.enhanced_simulator import EnhancedSimulator
+from src.config.config_manager import ConfigManager
+from src.utils.execution_engine import CycleAccurateExecutionEngine
 
 # Load configuration
 config_manager = ConfigManager()
 config = config_manager.load_default()
 
 # Create simulator
-simulator = EnhancedSimulator(config)
+from main import SuperscalarSimulator
+simulator = SuperscalarSimulator()
 
-# Run simulation
-results = simulator.run_program(
-    "benchmarks/simple_arithmetic.asm",
-    max_cycles=1000
-)
+# Load and run a program
+simulator.load_program("benchmarks/simple_arithmetic.asm")
+results = simulator.run_simulation()
 
 # Analyze results
-print(f"IPC: {results.ipc:.3f}")
-print(f"Power: {results.average_power:.2f}W")
+print(f"IPC: {results['ipc']:.3f}")
+print(f"Branch Accuracy: {results['branch_accuracy']:.1f}%")
 ```
 
 ## Benchmarks
@@ -209,12 +218,43 @@ print(f"Power: {results.average_power:.2f}W")
 
 ### Performance Metrics
 
-| Metric | Simple Benchmarks | Complex Benchmarks | Research Benchmarks |
-|--------|-------------------|-------------------|-------------------|
-| **IPC** | 0.8 - 1.2 | 0.4 - 0.8 | 0.2 - 0.6 |
-| **Branch Accuracy** | >90% | 85-95% | 80-90% |
-| **Cache Hit Rate** | >95% | 90-95% | 85-92% |
-| **Power Efficiency** | High | Medium | Variable |
+![Benchmark Comparison](artifacts/benchmark_comparison.png)
+
+| Benchmark | IPC | Cycles | Branch Accuracy | Cache Hit Rate | EPI (pJ) |
+|-----------|-----|--------|-----------------|----------------|----------|
+| basic_operations | 0.620 | 10000 | 95.9% | 99.1% | 104925.4 |
+| bubble_sort | 0.923 | 10000 | 100.0% | 99.7% | 80930.7 |
+| fibonacci_recursive | 0.833 | 10000 | 96.7% | 80.3% | 87015.1 |
+| dhrystone_like | 0.781 | 8043 | 95.9% | 91.0% | 90897.3 |
+| quicksort | 0.946 | 10000 | 99.6% | 99.4% | 80525.6 |
+| matrix_multiplication | 0.921 | 38 | 0.0% | 0.0% | 80242.3 |
+| streaming_access | 0.876 | 10000 | 99.7% | 99.6% | 83988.4 |
+| memory_access_patterns | 0.889 | 10000 | 100.0% | 99.6% | 83946.0 |
+| compute_intensive | 0.739 | 2881 | 93.6% | 95.0% | 93901.1 |
+| simple_arithmetic | 0.604 | 48 | 76.9% | 0.0% | 100287.8 |
+| simple_fibonacci | 0.688 | 48 | 66.7% | 0.0% | 94089.1 |
+| simple_sort | 0.826 | 23 | 100.0% | 25.0% | 79600.2 |
+| simple_test | 0.667 | 9 | 0.0% | 0.0% | 79066.9 |
+| validation_suite | 0.826 | 10000 | 99.9% | 99.5% | 88478.3 |
+
+### Extended Benchmarks
+
+Additional benchmarks in subdirectories for advanced workload testing:
+
+| Benchmark | Category | Description | Instructions |
+|-----------|----------|-------------|--------------|
+| `integer/dhrystone_like.asm` | Integer | Integer-intensive loops, arrays, string-like ops | ~200 |
+| `integer/quicksort.asm` | Integer | Quicksort partitioning, branch-heavy workload | ~150 |
+| `memory/streaming_access.asm` | Memory | Sequential, strided, random-like access patterns | ~120 |
+| `mixed/compute_intensive.asm` | Mixed | ALU + memory + branches, scientific computation | ~300 |
+
+```bash
+# Run extended benchmarks
+python main.py --benchmark benchmarks/integer/dhrystone_like.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/integer/quicksort.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/memory/streaming_access.asm --max-cycles 200 --profile
+python main.py --benchmark benchmarks/mixed/compute_intensive.asm --max-cycles 300 --profile
+```
 
 ## Configuration
 
@@ -308,17 +348,17 @@ Execution Metrics:
   Cycles: 1,250
   Instructions: 856
   IPC: 0.685
-  
+
 Performance Analysis:
   Branch Accuracy: 94.2%
   L1 Cache Hit Rate: 96.8%
   L2 Cache Hit Rate: 89.3%
-  
+
 Power Consumption:
   Average Power: 12.4W
   Total Energy: 15.5mJ
   Energy per Instruction: 18.1µJ
-  
+
 Bottlenecks Identified:
   1. Branch misprediction penalty: 8.3%
   2. Cache miss latency: 5.7%
@@ -332,15 +372,18 @@ python -m pytest tests/ -v --cov=src
 
 # Test specific components
 python -m pytest tests/test_branch_prediction.py
-python -m pytest tests/test_advanced_features.py
 python -m pytest tests/test_pipeline.py
+python -m pytest tests/test_pipeline_enhancements.py
 
 # Performance regression tests
 python -m pytest tests/test_complete_pipeline.py --benchmark
+
+# Quick test (no coverage)
+python -m pytest tests/ --no-cov -q
 ```
 
 ### Quality Metrics
-- **Test Coverage**: 92 tests with comprehensive validation
+- **Test Coverage**: 139 tests with comprehensive validation
 - **Code Quality**: Ruff linting and formatting (replaces black, isort, flake8)
 - **Type Safety**: MyPy validation with strict mode
 - **Documentation**: Comprehensive API coverage
@@ -363,9 +406,10 @@ src/pipeline/
 ├── fetch_stage.py
 ├── decode_stage.py
 ├── execute_stage.py
-├── memory_stage.py
-├── writeback_stage.py
-└── pipeline_controller.py
+├── issue_stage.py
+├── memory_access_stage.py
+├── write_back_stage.py
+└── hazard_controller.py
 ```
 
 **Features:**
@@ -380,14 +424,15 @@ src/pipeline/
 ### Prediction & Memory
 ```
 src/branch_prediction/
-├── tournament_predictor.py
-├── perceptron_predictor.py
+├── always_taken_predictor.py
+├── bimodal_predictor.py
+├── gshare_predictor.py
 └── hybrid_predictor.py
 
 src/cache/
-├── non_blocking_cache.py
+├── cache.py
 ├── enhanced_cache.py
-└── memory_hierarchy.py
+└── non_blocking_cache.py
 ```
 
 **Features:**
@@ -403,12 +448,12 @@ src/cache/
 ```
 src/config/
 ├── config_manager.py
-└── validation.py
+└── config_models.py
 
 src/profiling/
 ├── power_model.py
 ├── performance_profiler.py
-└── bottleneck_analyzer.py
+└── memory_profiler.py
 
 src/exceptions/
 └── simulator_exceptions.py

@@ -37,7 +37,7 @@ This project adheres to a code of conduct that we expect all contributors to fol
    ```bash
    make dev-setup
    ```
-   
+
    Or manually:
    ```bash
    python -m venv venv
@@ -161,28 +161,28 @@ from pathlib import Path
 class BranchPredictor:
     """
     Base class for branch predictors.
-    
+
     This class provides the interface that all branch predictors
     must implement for integration with the pipeline simulator.
-    
+
     Args:
         num_entries: Number of prediction table entries
         history_length: Length of branch history to consider
     """
-    
+
     def __init__(self, num_entries: int, history_length: int = 8) -> None:
         self.num_entries = num_entries
         self.history_length = history_length
         self._prediction_table: Dict[int, int] = {}
-    
+
     def predict(self, pc: int, history: Optional[int] = None) -> bool:
         """
         Predict whether a branch will be taken.
-        
+
         Args:
             pc: Program counter of the branch instruction
             history: Branch history for global predictors
-            
+
         Returns:
             True if branch is predicted taken, False otherwise
         """
@@ -231,19 +231,19 @@ Example test:
 def test_branch_predictor_accuracy():
     """Test that branch predictor achieves expected accuracy."""
     predictor = GsharePredictor(num_entries=1024, history_length=8)
-    
+
     # Test with known pattern
     correct_predictions = 0
     total_predictions = 100
-    
+
     for i in range(total_predictions):
         prediction = predictor.predict(pc=i * 4)
         actual = (i % 4) < 2  # Known pattern
         predictor.update(pc=i * 4, taken=actual)
-        
+
         if prediction == actual:
             correct_predictions += 1
-    
+
     accuracy = correct_predictions / total_predictions
     assert accuracy > 0.7, f"Expected >70% accuracy, got {accuracy:.1%}"
 ```

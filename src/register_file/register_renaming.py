@@ -92,6 +92,8 @@ class AdvancedRegisterRenaming:
         num_physical_regs: int = 128,
         reorder_buffer_size: int = 64,
         renaming_scheme: RenamingScheme = RenamingScheme.EXPLICIT,
+        rename_bandwidth: int = 4,
+        commit_bandwidth: int = 4,
     ):
         """
         Initialize register renaming system.
@@ -101,11 +103,15 @@ class AdvancedRegisterRenaming:
             num_physical_regs: Number of physical registers
             reorder_buffer_size: Size of reorder buffer
             renaming_scheme: Renaming scheme to use
+            rename_bandwidth: Max instructions to rename per cycle
+            commit_bandwidth: Max instructions to commit per cycle
         """
         self.num_logical_regs = num_logical_regs
         self.num_physical_regs = num_physical_regs
         self.reorder_buffer_size = reorder_buffer_size
         self.renaming_scheme = renaming_scheme
+        self.rename_bandwidth = rename_bandwidth
+        self.commit_bandwidth = commit_bandwidth
 
         # Physical register file
         self.physical_registers = [
@@ -151,6 +157,32 @@ class AdvancedRegisterRenaming:
         }
 
         self.logger = logging.getLogger(__name__)
+
+    def rename_instruction_batch(
+        self,
+        instructions: list[tuple[int, list[int], int | None]],
+    ) -> list[tuple[bool, list[int], int | None]]:
+        """
+        Rename registers for a batch of instructions, up to rename_bandwidth.
+
+        Args:
+            instructions: List of (instruction_id, src_regs, dst_reg) tuples
+
+        Returns:
+            List of (success, renamed_src_regs, renamed_dst_reg) tuples
+        """
+        results = []
+        renamed_count = 0
+
+        for instr_id, src_regs, dst_reg in instructions:
+            if renamed_count >= self.rename_bandwidth:
+                break
+            result = self.rename_instruction(instr_id, src_regs, dst_reg)
+            results.append(result)
+            if result[0]:  # success
+                renamed_count += 1
+
+        return results
 
     def rename_instruction(
         self, instruction_id: int, src_regs: list[int], dst_reg: int | None
@@ -256,19 +288,27 @@ class AdvancedRegisterRenaming:
 
         return False
 
-    def commit_instructions(self) -> list[int]:
+    def commit_instructions(self, max_commit: int | None = None) -> list[int]:
         """
         Commit completed instructions from head of reorder buffer.
+
+        Args:
+            max_commit: Maximum instructions to commit (defaults to commit_bandwidth)
 
         Returns:
             List of committed instruction IDs
         """
+        if max_commit is None:
+            max_commit = self.commit_bandwidth
+
         committed_instructions = []
+        commit_count = 0
 
         while (
             self.reorder_buffer
             and self.reorder_buffer[0].completed
             and not self.reorder_buffer[0].exception
+            and commit_count < max_commit
         ):
             rob_entry = self.reorder_buffer.popleft()
             rob_entry.commit_cycle = self.current_cycle
@@ -288,6 +328,7 @@ class AdvancedRegisterRenaming:
                     self._free_physical_register(rob_entry.old_physical_reg)
 
             committed_instructions.append(rob_entry.instruction_id)
+            commit_count += 1
             self.logger.debug(f"Committed instruction {rob_entry.instruction_id}")
 
         return committed_instructions
@@ -527,6 +568,8 @@ class AdvancedRegisterRenaming:
                 / self.reorder_buffer_size,
                 "current_cycle": self.current_cycle,
                 "active_checkpoints": len(self.branch_checkpoints),
+                "rename_bandwidth": self.rename_bandwidth,
+                "commit_bandwidth": self.commit_bandwidth,
             }
         )
 

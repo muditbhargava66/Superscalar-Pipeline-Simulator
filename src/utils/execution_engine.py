@@ -21,6 +21,19 @@ except (ImportError, ValueError):
     sys.path.insert(0, os.path.dirname(__file__))
     from instruction import Instruction, InstructionType  # type: ignore[no-redef]
 
+# Import memory hierarchy for cache integration
+try:
+    from cache.enhanced_cache import MemoryAccessType, MemoryHierarchy
+except (ImportError, ValueError):
+    try:
+        from ..cache.enhanced_cache import (  # type: ignore[no-redef]
+            MemoryAccessType,
+            MemoryHierarchy,
+        )
+    except (ImportError, ValueError):
+        MemoryAccessType = None  # type: ignore[assignment,misc]
+        MemoryHierarchy = None  # type: ignore[assignment,misc]
+
 
 class ExecutionResult(Enum):
     """Execution result status."""
@@ -55,7 +68,7 @@ class CycleAccurateExecutionEngine:
     resource contention, and state management.
     """
 
-    def __init__(self, register_file, memory, data_cache):
+    def __init__(self, register_file, memory, data_cache, memory_hierarchy=None):
         """
         Initialize the execution engine.
 
@@ -63,10 +76,12 @@ class CycleAccurateExecutionEngine:
             register_file: Register file for operand access
             memory: Main memory system
             data_cache: Data cache for memory operations
+            memory_hierarchy: Enhanced memory hierarchy (L1/L2/main memory)
         """
         self.register_file = register_file
         self.memory = memory
         self.data_cache = data_cache
+        self.memory_hierarchy = memory_hierarchy
         self.logger = logging.getLogger(__name__)
 
         # Execution state tracking
@@ -75,7 +90,7 @@ class CycleAccurateExecutionEngine:
         self.current_cycle = 0
 
         # Performance counters
-        self.stats = {
+        self.stats: dict[str, int | float] = {
             "instructions_executed": 0,
             "cycles_executed": 0,
             "arithmetic_ops": 0,
@@ -83,6 +98,7 @@ class CycleAccurateExecutionEngine:
             "branch_ops": 0,
             "cache_hits": 0,
             "cache_misses": 0,
+            "cache_stall_cycles": 0,
             "pipeline_stalls": 0,
         }
 
@@ -205,19 +221,20 @@ class CycleAccurateExecutionEngine:
         imm_val = self._get_immediate_value(instruction)
 
         # Perform operation
-        if instruction.opcode == "add":
+        opcode = instruction.opcode.lower()
+        if opcode == "add":
             result = rs_val + rt_val
-        elif instruction.opcode == "addi":
+        elif opcode == "addi":
             result = rs_val + imm_val
-        elif instruction.opcode == "sub":
+        elif opcode == "sub":
             result = rs_val - rt_val
-        elif instruction.opcode == "mult":
+        elif opcode == "mult":
             result = rs_val * rt_val
             # Store in HI/LO registers (simplified)
             self.register_file.write_register(32, result >> 32)  # HI
             self.register_file.write_register(33, result & 0xFFFFFFFF)  # LO
             return ExecutionResult.SUCCESS, result
-        elif instruction.opcode == "div":
+        elif opcode == "div":
             if rt_val == 0:
                 exec_state.exception = "Division by zero"
                 return ExecutionResult.EXCEPTION, "Division by zero"
@@ -226,9 +243,9 @@ class CycleAccurateExecutionEngine:
             self.register_file.write_register(32, remainder)  # HI
             self.register_file.write_register(33, quotient)  # LO
             return ExecutionResult.SUCCESS, quotient
-        elif instruction.opcode == "li":
+        elif opcode in ["li", "la"]:
             result = imm_val
-        elif instruction.opcode == "move":
+        elif opcode == "move":
             result = rs_val
         else:
             result = 0  # Default
@@ -258,38 +275,40 @@ class CycleAccurateExecutionEngine:
         rt_val = self._get_rt_value(instruction)
         imm_val = self._get_immediate_value(instruction)
 
-        if instruction.opcode == "and":
+        opcode = instruction.opcode.lower()
+        if opcode == "and":
             result = rs_val & rt_val
-        elif instruction.opcode == "andi":
+        elif opcode == "andi":
             result = rs_val & imm_val
-        elif instruction.opcode == "or":
+        elif opcode == "or":
             result = rs_val | rt_val
-        elif instruction.opcode == "ori":
+        elif opcode == "ori":
             result = rs_val | imm_val
-        elif instruction.opcode == "xor":
+        elif opcode == "xor":
             result = rs_val ^ rt_val
-        elif instruction.opcode == "xori":
+        elif opcode == "xori":
             result = rs_val ^ imm_val
-        elif instruction.opcode == "nor":
+        elif opcode == "nor":
             result = ~(rs_val | rt_val)
-        elif instruction.opcode == "sll":
-            result = rt_val << (instruction.immediate or 0)  # type: ignore[attr-defined]
-        elif instruction.opcode == "srl":
-            result = rt_val >> (instruction.immediate or 0)  # type: ignore[attr-defined]
-        elif instruction.opcode == "sra":
-            result = rt_val >> (
-                getattr(instruction, "immediate", 0) or 0
-            )  # Arithmetic shift
-        elif instruction.opcode == "lui":
+        elif opcode == "sll":
+            result = rt_val << imm_val
+        elif opcode == "srl":
+            result = rt_val >> imm_val
+        elif opcode == "sra":
+            result = rt_val >> imm_val  # Arithmetic shift
+        elif opcode == "lui":
             result = imm_val << 16
         else:
             result = 0
 
-        # Write result
-        if instruction.rd is not None:  # type: ignore[attr-defined]
-            self.register_file.write_register(instruction.rd, result)  # type: ignore[attr-defined]
-        elif instruction.rt is not None:  # type: ignore[attr-defined]
-            self.register_file.write_register(instruction.rt, result)  # type: ignore[attr-defined]
+        # Write result to destination register
+        if instruction.destination:
+            dest_reg = self._parse_register(instruction.destination)
+            self.register_file.write_register(dest_reg, result)
+        elif instruction.operands:
+            # For R-type: operands = [rd, rs, rt] -> destination is rd
+            dest_reg = self._parse_register(instruction.operands[0])  # type: ignore[arg-type]
+            self.register_file.write_register(dest_reg, result)
 
         exec_state.result_value = result
         return ExecutionResult.SUCCESS, result
@@ -304,19 +323,24 @@ class CycleAccurateExecutionEngine:
         rt_val = self._get_rt_value(instruction)
         imm_val = self._get_immediate_value(instruction)
 
-        if instruction.opcode == "slt":
+        opcode = instruction.opcode.lower()
+        if opcode == "slt":
             result = 1 if rs_val < rt_val else 0
-        elif instruction.opcode == "slti":
+        elif opcode == "slti":
             result = 1 if rs_val < imm_val else 0
-        elif instruction.opcode == "sltu":
+        elif opcode == "sltu":
             result = 1 if (rs_val & 0xFFFFFFFF) < (rt_val & 0xFFFFFFFF) else 0
-        elif instruction.opcode == "sltiu":
+        elif opcode == "sltiu":
             result = 1 if (rs_val & 0xFFFFFFFF) < (imm_val & 0xFFFFFFFF) else 0
         else:
             result = 0
 
-        if instruction.rd is not None:  # type: ignore[attr-defined]
-            self.register_file.write_register(instruction.rd, result)  # type: ignore[attr-defined]
+        if instruction.destination:
+            dest_reg = self._parse_register(instruction.destination)
+            self.register_file.write_register(dest_reg, result)
+        elif instruction.operands:
+            dest_reg = self._parse_register(instruction.operands[0])  # type: ignore[arg-type]
+            self.register_file.write_register(dest_reg, result)
 
         exec_state.result_value = result
         return ExecutionResult.SUCCESS, result
@@ -335,22 +359,27 @@ class CycleAccurateExecutionEngine:
 
         # Perform memory access through cache
         try:
-            if instruction.opcode == "lw":
+            opcode = instruction.opcode.lower()
+            if opcode == "lw":
                 data = self._load_word(address)
-            elif instruction.opcode == "lh":
+            elif opcode == "lh":
                 data = self._load_halfword(address, signed=True)
-            elif instruction.opcode == "lhu":
+            elif opcode == "lhu":
                 data = self._load_halfword(address, signed=False)
-            elif instruction.opcode == "lb":
+            elif opcode == "lb":
                 data = self._load_byte(address, signed=True)
-            elif instruction.opcode == "lbu":
+            elif opcode == "lbu":
                 data = self._load_byte(address, signed=False)
             else:
                 data = 0
 
             # Write to destination register
-            if instruction.rt is not None:  # type: ignore[attr-defined]
-                self.register_file.write_register(instruction.rt, data)  # type: ignore[attr-defined]
+            if instruction.destination:
+                dest_reg = self._parse_register(instruction.destination)
+                self.register_file.write_register(dest_reg, data)
+            elif instruction.operands:
+                dest_reg = self._parse_register(instruction.operands[0])  # type: ignore[arg-type]
+                self.register_file.write_register(dest_reg, data)
 
             exec_state.result_value = data
             return ExecutionResult.SUCCESS, data
@@ -377,11 +406,12 @@ class CycleAccurateExecutionEngine:
 
         # Perform memory access through cache
         try:
-            if instruction.opcode == "sw":
+            opcode = instruction.opcode.lower()
+            if opcode == "sw":
                 self._store_word(address, data)
-            elif instruction.opcode == "sh":
+            elif opcode == "sh":
                 self._store_halfword(address, data)
-            elif instruction.opcode == "sb":
+            elif opcode == "sb":
                 self._store_byte(address, data)
 
             return ExecutionResult.SUCCESS, data
@@ -402,42 +432,55 @@ class CycleAccurateExecutionEngine:
 
         # Evaluate branch condition
         taken = False
-        if instruction.opcode == "beq":
+        opcode = instruction.opcode.lower()
+        if opcode == "beq":
             taken = rs_val == rt_val
-        elif instruction.opcode == "bne":
+        elif opcode == "bne":
             taken = rs_val != rt_val
-        elif instruction.opcode == "blez":
+        elif opcode == "blez":
             taken = rs_val <= 0
-        elif instruction.opcode == "bgtz":
+        elif opcode == "bgtz":
             taken = rs_val > 0
-        elif instruction.opcode == "bltz":
+        elif opcode == "bltz":
             taken = rs_val < 0
-        elif instruction.opcode == "bgez":
+        elif opcode == "bgez":
             taken = rs_val >= 0
 
         exec_state.branch_taken = taken
 
         if taken:
-            # Calculate branch target
-            target = instruction.pc + 4 + (instruction.immediate * 4)  # type: ignore[attr-defined]
+            # Calculate branch target from operands
+            offset = self._get_immediate_value(instruction)
+            target = instruction.address + 4 + (offset * 4)
             exec_state.branch_target = target
             return ExecutionResult.BRANCH_TAKEN, target
         else:
-            return ExecutionResult.BRANCH_NOT_TAKEN, instruction.pc + 4  # type: ignore[attr-defined]
+            return ExecutionResult.BRANCH_NOT_TAKEN, instruction.address + 4
 
     def _execute_jump(self, exec_state: ExecutionState) -> tuple[ExecutionResult, Any]:
         """Execute jump instruction."""
         instruction = exec_state.instruction
 
-        if instruction.opcode == "j":
-            target = instruction.immediate  # type: ignore[attr-defined]
-        elif instruction.opcode == "jal":
+        opcode = instruction.opcode.lower()
+
+        if opcode == "j":
+            # Target stored as string in operands[0]
+            target = (
+                int(instruction.operands[0])
+                if instruction.operands
+                else instruction.address + 4
+            )
+        elif opcode == "jal":
             # Save return address
             self.register_file.write_register(31, instruction.address + 8)  # $ra
-            target = self._get_immediate_value(instruction)
-        elif instruction.opcode == "jr":
+            target = (
+                int(instruction.operands[0])
+                if instruction.operands
+                else instruction.address + 4
+            )
+        elif opcode == "jr":
             target = self._get_rs_value(instruction)
-        elif instruction.opcode == "jalr":
+        elif opcode == "jalr":
             # Save return address
             if len(instruction.operands) > 1:
                 rd_reg = self._parse_register(instruction.operands[1])  # type: ignore[arg-type]
@@ -486,17 +529,40 @@ class CycleAccurateExecutionEngine:
 
     def _check_resources(self, instruction: Instruction) -> bool:
         """Check if resources are available for instruction execution."""
-        # Simplified resource checking
+        # TODO : Simplified resource checking
         # In a real implementation, this would check functional unit availability
         return len(self.executing_instructions) < 4  # Max 4 concurrent executions
 
     def _get_rs_value(self, instruction: Instruction) -> int:
         """Get RS register value from instruction operands."""
         if (
-            instruction.instruction_type == InstructionType.ARITHMETIC
+            instruction.instruction_type
+            in [
+                InstructionType.ARITHMETIC,
+                InstructionType.LOGICAL,
+                InstructionType.COMPARISON,
+            ]
             and len(instruction.operands) >= 3
         ):
             # R-type: operands = [rd, rs, rt] -> rs is operands[1]
+            return self._get_register_value(
+                self._parse_register(instruction.operands[1])  # type: ignore[arg-type]
+            )
+        elif (
+            instruction.instruction_type
+            in [
+                InstructionType.ARITHMETIC,
+                InstructionType.LOGICAL,
+            ]
+            and len(instruction.operands) >= 2
+        ):
+            if instruction.opcode.lower() in ["li", "la", "lui"]:
+                return 0
+            if instruction.opcode.lower() == "move":
+                return self._get_register_value(
+                    self._parse_register(instruction.operands[1])  # type: ignore[arg-type]
+                )
+            # I-type logical/arithmetic: operands = [rd, rs, imm] -> rs is operands[1]
             return self._get_register_value(
                 self._parse_register(instruction.operands[1])  # type: ignore[arg-type]
             )
@@ -505,8 +571,8 @@ class CycleAccurateExecutionEngine:
             InstructionType.STORE,
         ]:
             # Memory: operands = [rt, "offset(rs)"] -> extract rs from operands[1]
-            if len(instruction.operands) >= 2 and "(" in instruction.operands[1]:  # type: ignore[operator]
-                rs_part = instruction.operands[1].split("(")[1].rstrip(")")  # type: ignore[union-attr]
+            if len(instruction.operands) >= 2 and "(" in str(instruction.operands[1]):
+                rs_part = str(instruction.operands[1]).split("(")[1].rstrip(")")
                 return self._get_register_value(self._parse_register(rs_part))
         elif (
             instruction.instruction_type == InstructionType.BRANCH
@@ -521,7 +587,12 @@ class CycleAccurateExecutionEngine:
     def _get_rt_value(self, instruction: Instruction) -> int:
         """Get RT register value from instruction operands."""
         if (
-            instruction.instruction_type == InstructionType.ARITHMETIC
+            instruction.instruction_type
+            in [
+                InstructionType.ARITHMETIC,
+                InstructionType.LOGICAL,
+                InstructionType.COMPARISON,
+            ]
             and len(instruction.operands) >= 3
         ):
             # R-type: operands = [rd, rs, rt] -> rt is operands[2]
@@ -541,18 +612,33 @@ class CycleAccurateExecutionEngine:
     def _get_immediate_value(self, instruction: Instruction) -> int:
         """Get immediate value from instruction operands."""
         if (
-            instruction.instruction_type == InstructionType.LOAD
-            and instruction.opcode.upper() == "LI"
+            instruction.opcode.lower() in ["li", "la", "lui"]
+            and len(instruction.operands) >= 2
         ):
-            # Load immediate: operands = [rt, immediate] -> immediate is operands[1]
-            return int(instruction.operands[1]) if len(instruction.operands) >= 2 else 0
+            try:
+                return int(instruction.operands[1])
+            except (ValueError, TypeError):
+                return 0
+        elif (
+            instruction.instruction_type
+            in [
+                InstructionType.ARITHMETIC,
+                InstructionType.LOGICAL,
+            ]
+            and len(instruction.operands) >= 3
+        ):
+            # I-type: operands = [rd, rs, imm] -> immediate is operands[2]
+            try:
+                return int(instruction.operands[2])
+            except (ValueError, TypeError):
+                return 0
         elif instruction.instruction_type in [
             InstructionType.LOAD,
             InstructionType.STORE,
         ]:
             # Memory: operands = [rt, "offset(rs)"] -> extract offset
-            if len(instruction.operands) >= 2 and "(" in instruction.operands[1]:  # type: ignore[operator]
-                offset_part = instruction.operands[1].split("(")[0]  # type: ignore[union-attr]
+            if len(instruction.operands) >= 2 and "(" in str(instruction.operands[1]):
+                offset_part = str(instruction.operands[1]).split("(")[0]
                 return int(offset_part) if offset_part else 0
         elif (
             instruction.instruction_type == InstructionType.BRANCH
@@ -617,8 +703,32 @@ class CycleAccurateExecutionEngine:
         return self.register_file.read_register(reg_num)
 
     def _load_word(self, address: int) -> int:
-        """Load word from memory through cache."""
-        # Check cache first
+        """Load word from memory through cache hierarchy."""
+        # Use enhanced memory hierarchy if available
+        if self.memory_hierarchy is not None and MemoryAccessType is not None:
+            try:
+                _hit, cycles_taken, data = self.memory_hierarchy.access(
+                    address, MemoryAccessType.READ
+                )
+                if data is not None:
+                    if _hit:
+                        self.stats["cache_hits"] += 1
+                    else:
+                        self.stats["cache_misses"] += 1
+                        # Track stall cycles from cache miss
+                        self.stats["cache_stall_cycles"] += max(0, cycles_taken - 1)
+                    return data
+                # Memory hierarchy returned no data, fall through to basic path
+                self.stats["cache_misses"] += 1
+                self.stats["cache_stall_cycles"] += max(0, cycles_taken - 1)
+                data = self.memory.read_word(address)
+                return data
+            except Exception as e:
+                self.logger.warning(
+                    f"Memory hierarchy access failed, using basic cache: {e}"
+                )
+
+        # Fallback: basic data cache path
         cache_result = self.data_cache.read(address)
         if cache_result is not None:
             self.stats["cache_hits"] += 1
@@ -653,7 +763,22 @@ class CycleAccurateExecutionEngine:
         return byte
 
     def _store_word(self, address: int, data: int) -> None:
-        """Store word to memory through cache."""
+        """Store word to memory through cache hierarchy."""
+        # Use enhanced memory hierarchy if available
+        if self.memory_hierarchy is not None and MemoryAccessType is not None:
+            try:
+                _hit, cycles_taken, _ = self.memory_hierarchy.access(
+                    address, MemoryAccessType.WRITE, data
+                )
+                if not _hit:
+                    self.stats["cache_stall_cycles"] += max(0, cycles_taken - 1)
+                return
+            except Exception as e:
+                self.logger.warning(
+                    f"Memory hierarchy store failed, using basic cache: {e}"
+                )
+
+        # Fallback: basic data cache path
         self.data_cache.write(address, data)
         self.memory.write_word(address, data)
 
@@ -678,5 +803,10 @@ class CycleAccurateExecutionEngine:
         stats = self.stats.copy()
         stats["current_cycle"] = self.current_cycle
         stats["instructions_in_flight"] = len(self.executing_instructions)
-        stats["ipc"] = stats["instructions_executed"] / max(stats["cycles_executed"], 1)
+        total_cycles = max(stats["cycles_executed"], 1)
+        stats["ipc"] = stats["instructions_executed"] / total_cycles
+        total_cache = stats["cache_hits"] + stats["cache_misses"]
+        stats["cache_hit_rate"] = (
+            stats["cache_hits"] / total_cache if total_cache > 0 else 0.0
+        )
         return stats
