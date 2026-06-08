@@ -2,14 +2,14 @@
 
 # Superscalar Pipeline Simulator
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Tests](https://img.shields.io/badge/tests-426%20passing-green.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen.svg)](docs/)
 
-> Superscalar pipeline simulator for computer architecture research and education. Features branch prediction, non-blocking cache systems, power modeling, and cycle-accurate simulation capabilities.
+> Superscalar pipeline simulator for computer architecture research and education. Features branch prediction, non-blocking cache systems, power modeling, and cycle-counted behavioral simulation capabilities.
 
 **[Quick Start](#quick-start)** • **[Get Started Now](docs/installation.md)** • **[View Examples](examples/)** • **[Benchmarks](#benchmarks)** • **[![Star this repository](https://img.shields.io/github/stars/muditbhargava66/superscalar-pipeline-simulator?style=social)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)**
 
@@ -32,7 +32,7 @@
 - **Superscalar Execution** - True multi-issue pipeline capable of parallel dispatch to configurable ALU/FPU/LSU/BRU units
 - **Out-of-Order Execution** - Advanced reservation stations, ROB commit logic, and precise branch misprediction pipeline flushing
 - **Advanced Arithmetic** - Complete IEEE 754 floating-point unit (ADD.S, SUB.S, MUL.S, DIV.S) and precise sign-extension
-- **Multi-Level Cache Hierarchy** - Realistic L1I/L1D/L2 with cycle-accurate LRU replacement, non-blocking MSHR loads, and write-back policies
+- **Multi-Level Cache Hierarchy** - Realistic L1I/L1D/L2 with cycle-counted LRU replacement, non-blocking MSHR loads, and write-back policies
 - **Power & Thermal Modeling** - Component-level dynamic/static tracking with bounded temperature-dependent leakage models
 - **Data Forwarding** - Comprehensive bypass paths minimizing pipeline stalls
 - **Hazard Detection** - Complete RAW/WAR/WAW hazard resolution
@@ -49,7 +49,7 @@
 
 ### Capabilities
 - **Performance Analysis** - Bottleneck identification and optimization recommendations
-- **Cycle-Accurate Simulation** - Precise timing models for analysis
+- **Cycle-Counted Behavioral Simulation** - Precise timing models for architectural analysis
 - **Live Visualization** - Real-time pipeline state display with matplotlib
 - **Configuration GUI** - Tkinter-based interactive config editor
 - **Machine Learning Integration** - Advanced predictors with adaptive algorithms
@@ -336,7 +336,7 @@ python -m pytest tests/ --no-cov -q
 - **Code Quality**: Strict Ruff linting and formatting enforcing modern Python standards.
 - **Type Safety**: Complete MyPy validation with zero type errors across 50 source files.
 - **Documentation**: Comprehensive API documentation and architectural design documents.
-- **Performance**: Validated against 14 complex and simple assembly benchmarks ensuring cycle-accurate constraints.
+- **Performance**: Validated against 14 complex and simple assembly benchmarks ensuring behavioral constraints.
 - **Pre-commit Hooks**: 12 automated checks executing prior to all commits.
 
 ## Architecture
@@ -398,7 +398,7 @@ src/cache/
 - **Advanced Branch Prediction**: Multi-level hybrid and perceptron predictors.
 - **MSHR-based Caches**: Non-blocking memory accesses.
 - **Multi-Level Hierarchy**: L1 Instruction, L1 Data, and L2 Caches.
-- **Realistic Timing Models**: Cycle-accurate memory stall simulation.
+- **Realistic Timing Models**: Cycle-counted memory stall simulation.
 
 </td>
 </tr>

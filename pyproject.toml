@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "superscalar-pipeline-simulator"
-version = "1.3.0"
+version = "1.4.0"
 description = "Advanced superscalar pipeline simulator with enhanced features for computer architecture research and education"
 readme = "README.md"
 license = {text = "MIT"}
@@ -160,6 +160,7 @@ max-complexity = 10
 [tool.mypy]
 python_version = "3.10"
 mypy_path = "src"
+explicit_package_bases = true
 ignore_missing_imports = true
 warn_return_any = false
 warn_unused_configs = true

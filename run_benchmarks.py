@@ -174,8 +174,8 @@ def _generate_plots(results_data: list[dict]) -> None:
         color="#4FC1FF",
     )
 
-    ax.set_ylabel("Stall Cycles")
-    ax.set_title("Pipeline Stall Breakdown (Hazard Profiling)")
+    ax.set_ylabel("Issue Slot Stalls")
+    ax.set_title("Pipeline Stall Breakdown (Issue Slot Stalls)")
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=45, ha="right")
     ax.legend()
@@ -226,7 +226,7 @@ def _write_table(f, results_data: list[dict]) -> None:
     f.write("## Detailed Metrics\n\n")
     f.write(
         "| Benchmark | IPC | Cycles | Branch Accuracy "
-        "| Cache Hit Rate | EPI (pJ) | Total Stalls |\n"
+        "| Cache Hit Rate | EPI (pJ) | Issue Slot Stalls |\n"
     )
     f.write(
         "|-----------|-----|--------|-----------------"
