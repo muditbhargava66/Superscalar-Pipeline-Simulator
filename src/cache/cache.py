@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import logging
-import time
 from typing import Any, List, Optional
 
 
@@ -21,12 +20,12 @@ class CacheBlock:
         self.data = data
         self.valid = valid
         self.dirty = False
-        self.last_access_time = time.time()
+        self.last_access_time: int = 0
         self.access_count = 0
 
-    def access(self) -> None:
+    def access(self, cycle: int = 0) -> None:
         """Update access metadata."""
-        self.last_access_time = time.time()
+        self.last_access_time = cycle
         self.access_count += 1
 
 
@@ -482,14 +481,8 @@ class DataCache(Cache):
         if address in self.store_buffer:
             return self.store_buffer[address]
 
-        # Check cache
-        data = self.read(address)
-        if data is not None:
-            return data
-
-        # Cache miss - would fetch from memory in real implementation
-        self.misses += 1
-        return None
+        # Delegate to read() which handles hit/miss counting correctly
+        return self.read(address)
 
     def store(self, address: int, data: Any) -> bool:
         """
@@ -823,10 +816,14 @@ class MemoryHierarchy:
             self.l1_i_cache.add_instruction(address, l2_data)
             return l2_data
 
-        # L2 miss - access memory
+        # L2 miss - access main memory
         self.memory_accesses += 1
-        # In real implementation, would fetch from memory
-        return None
+        mem_data = self.memory.read(address)
+        if mem_data is not None:
+            # Install in L2 and L1
+            self.l2_cache.write(address, mem_data)
+            self.l1_i_cache.add_instruction(address, mem_data)
+        return mem_data
 
     def read_data(self, address: int) -> Any | None:
         """Read data through cache hierarchy."""
@@ -850,18 +847,17 @@ class MemoryHierarchy:
         return self.memory.read(address)
 
     def write_data(self, address: int, data: Any) -> bool:
-        """Write data through cache hierarchy."""
+        """Write data through cache hierarchy (write-back policy)."""
         self.l1_d_accesses += 1
 
-        # Write to L1 data cache
+        # Write to L1 data cache (marks block dirty for write-back)
         success = self.l1_d_cache.store(address, data)
 
-        # Also update L2 if present
+        # Write-back: do NOT write to memory here.
+        # Memory writes only occur on dirty block eviction.
+        # If block exists in L2, update it (write-update policy).
         if self.l2_cache.read(address) is not None:
             self.l2_cache.write(address, data)
-
-        # Write-through to memory (simplified)
-        self.memory.write(address, data)
 
         return success
 

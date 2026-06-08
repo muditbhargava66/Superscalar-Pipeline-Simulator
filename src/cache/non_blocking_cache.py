@@ -104,13 +104,18 @@ class NonBlockingCache(EnhancedCache):
         return entry is not None and entry.valid
 
     def _select_victim(self) -> int | None:  # type: ignore[override]
-        """Select victim for eviction (simplified)."""
-        # Simple random replacement for now
-        import random
-
-        if self.cache:
-            return random.choice(list(self.cache.keys()))
-        return None
+        """Select victim for eviction using cycle-based LRU replacement."""
+        if not self.cache:
+            return None
+        # Select the block with the oldest (smallest) access_time for LRU eviction
+        oldest_addr = None
+        oldest_time = float("inf")
+        for block_addr, entry in self.cache.items():
+            access_time = getattr(entry, "access_time", 0)
+            if access_time < oldest_time:
+                oldest_time = access_time
+                oldest_addr = block_addr
+        return oldest_addr
 
     def _evict_line(self, block_addr: int) -> None:
         """Evict cache line."""

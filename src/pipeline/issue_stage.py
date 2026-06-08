@@ -244,9 +244,12 @@ class IssueStage:
 
     def _get_execution_unit_type(self, instruction: Instruction) -> str:
         """Get the execution unit type required for an instruction."""
-        if instruction.instruction_type == InstructionType.MEMORY:
+        if instruction.instruction_type in [
+            InstructionType.LOAD,
+            InstructionType.STORE,
+        ]:
             return "LSU"
-        elif instruction.instruction_type == InstructionType.FLOAT:
+        elif instruction.instruction_type == InstructionType.FLOATING_POINT:
             return "FPU"
         else:
             return "ALU"

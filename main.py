@@ -58,6 +58,7 @@ from register_file.register_renaming import AdvancedRegisterRenaming
 from utils.execution_engine import CycleAccurateExecutionEngine, ExecutionResult
 from utils.instruction import Instruction, InstructionType
 from utils.instruction_parser import MIPSInstructionParser
+from utils.instruction_parser import parse_register as _parse_reg
 from utils.scoreboard import Scoreboard
 
 # Import enhanced features (with fallback for basic functionality)
@@ -541,18 +542,20 @@ class SuperscalarSimulator:
 
     def _run_simulation_loop(self) -> dict[str, Any]:
         """
-        Enhanced cycle-accurate simulation loop.
+        Enhanced cycle-accurate simulation loop with true superscalar issue.
 
         Returns:
             Detailed simulation results and statistics
         """
         max_cycles = self.config["simulation"]["max_cycles"]
+        issue_width = self.config["pipeline"].get("issue_width", 4)
         cycles = 0
         instructions_completed = 0
         pc = 0
         instruction_id = 0
 
         self.logger.info(f"Running enhanced simulation for up to {max_cycles} cycles")
+        self.logger.info(f"Issue width: {issue_width} instructions/cycle")
 
         # Initialize performance counters for detailed tracking
         perf_counters = PerformanceCounters()
@@ -564,15 +567,29 @@ class SuperscalarSimulator:
         # Track branch instructions for predictor updates
         branch_instructions: dict[int, Instruction] = {}
 
-        # Enhanced simulation loop with cycle-accurate execution
-        while cycles < max_cycles and pc < len(
-            getattr(self, "parsed_instructions", [])
-        ):
+        # Track squashed instruction IDs (completed in exec engine but
+        # should NOT write results or affect pipeline state)
+        squashed_instruction_ids: set[int] = set()
+
+        # Track ROB IDs for register renaming integration
+        instruction_rob_ids: dict[int, int] = {}  # instruction_id -> rob_id
+        instructions_in_flight = 0  # Track issued instructions still in pipeline
+
+        # Determine which register renaming implementation is active
+        # EnhancedRegisterRenaming has 'rob_size'; AdvancedRegisterRenaming does not
+        _is_enhanced_renaming = hasattr(self.register_renaming, "rob_size")
+
+        # Enhanced simulation loop with cycle-accurate execution and multi-issue
+        total_instructions = len(getattr(self, "parsed_instructions", []))
+        program_done = False  # True when all instructions issued or syscall hit
+        stall_cycles_count = 0  # Track consecutive cycles with no progress
+
+        while cycles < max_cycles:
             cycles += 1
 
             # Advance all components by one cycle
             self.execution_engine.current_cycle = cycles
-            self.hazard_controller.current_cycle = cycles
+            # NOTE: hazard_controller.advance_cycle() increments current_cycle internally
             self.register_renaming.advance_cycle()
             self.memory_hierarchy.advance_cycle()
 
@@ -583,48 +600,131 @@ class SuperscalarSimulator:
             # CRITICAL: Advance hazard controller pipeline stages every cycle
             completed_from_pipeline = self.hazard_controller.advance_cycle()
             for instr_id, instr_state in completed_from_pipeline:
+                # Handle register renaming completion for ALL instructions,
+                # including squashed ones — otherwise the ROB entry stays
+                # non-committable and blocks the ROB head from advancing.
+                completed_rob_id = instruction_rob_ids.get(instr_id)
+                if completed_rob_id is not None:
+                    self.register_renaming.complete_instruction(completed_rob_id, None)
+
+                # Squashed instructions should not count toward completed
+                # totals or in-flight tracking (already decremented during flush).
+                if instr_id in squashed_instruction_ids:
+                    squashed_instruction_ids.discard(instr_id)
+                    continue
+
                 instructions_completed += 1
 
-                # Handle register renaming completion
-                self.register_renaming.complete_instruction(instr_id, None)
+                # Decrement in-flight counter for drain tracking
+                instructions_in_flight = max(0, instructions_in_flight - 1)
 
-            # Try to issue new instruction
+            # === TRUE SUPERSCALAR: Issue up to issue_width instructions per cycle ===
             instructions_issued_this_cycle = 0
-            if pc < len(getattr(self, "parsed_instructions", [])):
-                instruction = self.parsed_instructions[pc]
+            stall_this_cycle = False
 
-                # Branch prediction: predict when encountering a branch/jump
-                if instruction.instruction_type in [
-                    InstructionType.BRANCH,
-                    InstructionType.JUMP,
-                ]:
-                    try:
-                        self.branch_predictor.predict(instruction.address)
-                    except Exception:
-                        pass
-                    # Track for later update
-                    branch_instructions[instruction_id] = instruction
-
-                # Try to issue instruction through hazard controller
-                if self.hazard_controller.issue_instruction(
-                    instruction, instruction_id
+            if not program_done:
+                while (
+                    instructions_issued_this_cycle < issue_width
+                    and pc < total_instructions
+                    and not stall_this_cycle
                 ):
-                    # Start execution in execution engine
-                    if self.execution_engine.start_execution(
+                    instruction = self.parsed_instructions[pc]
+
+                    # Detect syscall — end of program
+                    if instruction.opcode.upper() == "SYSCALL":
+                        program_done = True
+                        break
+
+                    # Branch prediction: predict when encountering a branch/jump
+                    if instruction.instruction_type in [
+                        InstructionType.BRANCH,
+                        InstructionType.JUMP,
+                    ]:
+                        try:
+                            self.branch_predictor.predict(instruction.address)
+                        except Exception:
+                            pass
+                        # Track for later update
+                        branch_instructions[instruction_id] = instruction
+
+                    # Register renaming: attempt to rename before issue
+                    rob_id: int | None = None
+                    if _is_enhanced_renaming:
+                        # EnhancedRegisterRenaming.rename_instruction(instruction) -> int | None
+                        try:
+                            rob_id = self.register_renaming.rename_instruction(
+                                instruction
+                            )  # type: ignore[call-arg,arg-type,assignment]
+                        except Exception:
+                            rob_id = None
+                        if rob_id is None:
+                            # ROB full or no free physical registers — stall
+                            stall_this_cycle = True
+                            break
+                    else:
+                        # AdvancedRegisterRenaming.rename_instruction(id, src_regs, dst_reg)
+                        #   -> tuple[bool, list[int], int | None]
+                        try:
+                            _src_strs = instruction.get_source_registers()
+                            _src_regs = [_parse_reg(str(s)) for s in _src_strs]
+                            _dst_str = instruction.get_destination_register()
+                            _dst_reg = _parse_reg(str(_dst_str)) if _dst_str else None
+                            _ok, _renamed_srcs, _renamed_dst = (
+                                self.register_renaming.rename_instruction(
+                                    instruction_id, _src_regs, _dst_reg
+                                )
+                            )
+                            if not _ok:
+                                stall_this_cycle = True
+                                break
+                            # AdvancedRegisterRenaming tracks by instruction_id
+                            rob_id = instruction_id
+                        except Exception:
+                            rob_id = None
+
+                    # Try to issue instruction through hazard controller
+                    if self.hazard_controller.issue_instruction(
                         instruction, instruction_id
                     ):
-                        # Record power consumption for instruction execution
-                        if self.power_model:
-                            functional_unit = self._get_functional_unit_for_instruction(
-                                instruction
-                            )
-                            self.power_model.record_instruction_execution(
-                                instruction, functional_unit
-                            )
+                        # Start execution in execution engine
+                        if self.execution_engine.start_execution(
+                            instruction, instruction_id
+                        ):
+                            # Track ROB ID for this instruction
+                            if rob_id is not None:
+                                instruction_rob_ids[instruction_id] = rob_id
 
-                        pc += 1
-                        instruction_id += 1
-                        instructions_issued_this_cycle = 1
+                            # Record power consumption for instruction execution
+                            if self.power_model:
+                                functional_unit = (
+                                    self._get_functional_unit_for_instruction(
+                                        instruction
+                                    )
+                                )
+                                self.power_model.record_instruction_execution(
+                                    instruction, functional_unit
+                                )
+
+                            pc += 1
+                            instruction_id += 1
+                            instructions_issued_this_cycle += 1
+                            instructions_in_flight += 1
+                        else:
+                            # Resource contention — squash the ROB entry that
+                            # was optimistically allocated by rename.
+                            if rob_id is not None and _is_enhanced_renaming:
+                                self.register_renaming.squash_renaming(rob_id)  # type: ignore[attr-defined]
+                            stall_this_cycle = True
+                    else:
+                        # Hazard stall — squash the ROB entry that was
+                        # optimistically allocated by rename.
+                        if rob_id is not None and _is_enhanced_renaming:
+                            self.register_renaming.squash_renaming(rob_id)  # type: ignore[attr-defined]
+                        stall_this_cycle = True
+
+                # Check if all instructions have been issued
+                if pc >= total_instructions:
+                    program_done = True
 
             # Record cycle in performance counters
             in_flight = len(self.execution_engine.executing_instructions)
@@ -636,6 +736,14 @@ class SuperscalarSimulator:
             # Advance execution engine
             completed_executions = self.execution_engine.advance_cycle()
             for exec_id, result, data in completed_executions:
+                # Complete register renaming for this instruction
+                completed_rob_id = instruction_rob_ids.get(exec_id)
+                if completed_rob_id is not None:
+                    result_val = data if isinstance(data, int) else None
+                    self.register_renaming.complete_instruction(
+                        completed_rob_id, result_val
+                    )
+
                 # Update branch predictor with actual outcome
                 if exec_id in branch_instructions:
                     branch_instr = branch_instructions[exec_id]
@@ -648,18 +756,62 @@ class SuperscalarSimulator:
                     except Exception:
                         pass
 
-                    # Fix: Handle branch/jump by updating PC
-                    if actually_taken or branch_instr.instruction_type == InstructionType.JUMP:
-                        # Target address is returned in `data`
+                    # Handle branch/jump by updating PC
+                    if (
+                        actually_taken
+                        or branch_instr.instruction_type == InstructionType.JUMP
+                    ):
                         if isinstance(data, int):
-                            target_pc = data // 4  # Convert byte address to instruction index
-                            if target_pc != pc:
+                            target_pc = (
+                                data // 4
+                            )  # Convert byte address to instruction index
+                            if 0 <= target_pc < total_instructions and target_pc != pc:
+                                old_pc = pc
                                 pc = target_pc
-                                self.logger.debug(f"Branch/Jump taken, redirecting PC to {pc}")
-                                # TODO : In a real superscalar pipeline, we would flush here
-                                # self.hazard_controller.flush()
-                                # self.execution_engine.flush()
-                                # self.register_renaming.flush()
+                                # If jumping backward, allow re-issuing
+                                if target_pc <= old_pc:
+                                    program_done = False
+                                self.logger.debug(
+                                    f"Branch/Jump taken, redirecting PC to {pc}"
+                                )
+
+                                # --- Pipeline flush on control-flow change ---
+                                # Squash all in-flight instructions issued after this branch
+                                # (younger instructions have exec_id > exec_id of the branch)
+                                squashed_ids = [
+                                    eid
+                                    for eid in self.execution_engine.executing_instructions
+                                    if eid > exec_id
+                                ]
+                                for eid in squashed_ids:
+                                    del self.execution_engine.executing_instructions[
+                                        eid
+                                    ]
+                                    instructions_in_flight = max(
+                                        0, instructions_in_flight - 1
+                                    )
+                                if squashed_ids:
+                                    # Also flush from hazard controller to clean up
+                                    # register dependencies and stage tracking
+                                    self.hazard_controller.flush_instructions(
+                                        squashed_ids
+                                    )
+                                    # Track squashed IDs so we ignore their completions
+                                    squashed_instruction_ids.update(squashed_ids)
+                                    self.logger.debug(
+                                        f"Pipeline flush: squashed {len(squashed_ids)} "
+                                        f"younger instructions after branch {exec_id}"
+                                    )
+
+                                # Recover register renaming state (RAT checkpoint)
+                                branch_rob_id = instruction_rob_ids.get(exec_id)
+                                if _is_enhanced_renaming and branch_rob_id is not None:
+                                    try:
+                                        self.register_renaming.handle_branch_misprediction(
+                                            branch_rob_id
+                                        )
+                                    except Exception:
+                                        pass
 
             # Feed visualization snapshot periodically
             if (
@@ -699,6 +851,27 @@ class SuperscalarSimulator:
                 self.logger.debug(f"Instructions completed: {instructions_completed}")
                 self.logger.debug(f"PC: {pc}")
 
+            # Track progress: if no instructions issued AND none completed, count as stall
+            if (
+                instructions_issued_this_cycle == 0
+                and len(completed_from_pipeline) == 0
+            ):
+                stall_cycles_count += 1
+            else:
+                stall_cycles_count = 0
+
+            # Terminate when:
+            # 1. Program done AND pipeline fully drained, OR
+            # 2. Pipeline stalled with nothing in flight (deadlock / infinite loop detection)
+            if program_done and instructions_in_flight == 0:
+                self.logger.info("Pipeline fully drained, terminating simulation")
+                break
+            if stall_cycles_count > 20 and instructions_in_flight == 0:
+                self.logger.info(
+                    f"No progress for {stall_cycles_count} cycles with empty pipeline, terminating"
+                )
+                break
+
         self.logger.info(f"Enhanced simulation terminated after {cycles} cycles")
         self.logger.info(f"Instructions completed: {instructions_completed}")
 
@@ -716,7 +889,11 @@ class SuperscalarSimulator:
         renaming_stats = (
             self.register_renaming.get_statistics()
             if hasattr(self.register_renaming, "get_statistics")
-            else {}
+            else (
+                self.register_renaming.get_stats()
+                if hasattr(self.register_renaming, "get_stats")
+                else {}
+            )
         )
         memory_stats = (
             self.memory_hierarchy.get_statistics()
@@ -742,7 +919,9 @@ class SuperscalarSimulator:
         results = {
             "cycles": cycles,
             "instructions": instructions_completed,
+            "instructions_completed": instructions_completed,
             "ipc": ipc,
+            "issue_width": issue_width,
             "branch_accuracy": branch_accuracy,
             "cache_hit_rate": cache_hit_rate,
             "execution_stats": execution_stats,

@@ -243,22 +243,44 @@ class MemoryAccessStage:
 
             elif instruction.is_store():
                 # Store: sw $rt, offset($rs)
-                # Similar parsing
-                return 0  # TODO : Placeholder
+                # Same parsing as load
+                offset = 0
+                base_addr = 0
+
+                if (
+                    isinstance(instruction.operands[1], str)
+                    and "(" in instruction.operands[1]
+                ):
+                    parts = instruction.operands[1].split("(")
+                    offset = int(parts[0]) if parts[0] else 0
+                    base_reg = parts[1].rstrip(")")
+
+                    if hasattr(instruction, "register_values"):
+                        base_addr = instruction.register_values.get(base_reg, 0)
+                elif isinstance(instruction.operands[1], int):
+                    offset = instruction.operands[1]
+
+                return base_addr + offset
 
         # Default address
         return 0
 
-    def _flush_store_buffer(self) -> None:
-        """Flush entire store buffer to memory."""
+    def _flush_store_buffer(self, max_entries: int = 2) -> None:
+        """Flush up to max_entries from store buffer to memory (bandwidth-limited)."""
+        flushed = 0
+        remaining = []
         for address, data in self.store_buffer:
-            try:
-                self.memory.write(address, [data])
-                logging.debug(f"Flushed store: {data} to address {address:#x}")
-            except Exception as e:
-                logging.error(f"Store buffer flush error at {address:#x}: {e}")
-
-        self.store_buffer.clear()
+            if flushed < max_entries:
+                try:
+                    self.memory.write(address, [data])
+                    logging.debug(f"Flushed store: {data} to address {address:#x}")
+                    flushed += 1
+                except Exception as e:
+                    logging.error(f"Store buffer flush error at {address:#x}: {e}")
+                    remaining.append((address, data))
+            else:
+                remaining.append((address, data))
+        self.store_buffer = remaining
 
     def _flush_oldest_store(self) -> None:
         """Flush oldest entry from store buffer."""
@@ -314,15 +336,21 @@ class AdvancedMemoryAccessStage(MemoryAccessStage):
         super().__init__(data_cache, memory)
         self.enable_prefetch = enable_prefetch
 
+        # Cycle counter for latency tracking (updated externally each cycle)
+        self.current_cycle = 0
+
         # Memory disambiguation table
         self.load_queue: List[Tuple[Instruction, int]] = []
         self.pending_loads: List[
             Tuple[Instruction, int, int]
-        ] = []  # (instruction, address, cycle)
+        ] = []  # (instruction, address, cycle_issued)
 
         # Prefetch queue
         self.prefetch_queue: List[int] = []
         self.prefetch_distance = 4  # Prefetch 4 words ahead
+
+        # Miss latency for non-blocking loads (cycles)
+        self.miss_latency = 10
 
     def access_memory(
         self, executed_instructions: List[Tuple[Instruction, Any]]
@@ -394,30 +422,66 @@ class AdvancedMemoryAccessStage(MemoryAccessStage):
             self._handle_load(load_inst, load_addr)
 
     def _trigger_prefetch(self, current_address: int) -> None:
-        """Trigger prefetch for future accesses."""
+        """Trigger prefetch for future accesses.
+
+        Issues a non-blocking cache fill: the prefetch is queued and, if the
+        line is not already present, a background memory read is initiated.
+        The data will be available once the miss latency elapses.
+        """
         prefetch_address = current_address + (self.prefetch_distance * 4)  # Word size
 
         if prefetch_address not in self.prefetch_queue:
             self.prefetch_queue.append(prefetch_address)
 
-            # Initiate prefetch (non-blocking)
+            # Initiate prefetch: fill cache from memory if not already present
             if not self.data_cache.has_data(prefetch_address):
-                # TODO : In real implementation, this would be non-blocking
-                logging.debug(f"Prefetching address {prefetch_address:#x}")
+                # Issue a non-blocking memory read — data arrives after miss_latency cycles
+                try:
+                    raw = self.memory.read(prefetch_address, 4)
+                    data = raw[0] if isinstance(raw, list) and raw else (raw or 0)
+                except Exception:
+                    data = 0
+                # Queue the fill so it completes after the miss latency
+                self.pending_loads.append(
+                    (None, prefetch_address, self.current_cycle)  # type: ignore[arg-type]
+                )
+                # Stash prefetched data for quick fill when latency elapses
+                self._prefetch_data: dict[int, int] = getattr(
+                    self, "_prefetch_data", {}
+                )
+                self._prefetch_data[prefetch_address] = data
+                logging.debug(
+                    f"Prefetch issued for address {prefetch_address:#x}, "
+                    f"will complete at cycle {self.current_cycle + self.miss_latency}"
+                )
 
     def _process_pending_loads(self) -> None:
-        """Process non-blocking loads that may have completed."""
-        # TODO : In a real implementation, this would check if memory requests completed
-        # For simulation, we just track cycles
+        """Process non-blocking loads that may have completed.
+
+        Checks each pending load against the current cycle and the configured
+        miss latency.  Completed loads fill the cache from main memory so that
+        subsequent accesses hit.
+        """
         completed_loads = []
 
         for i, (inst, addr, start_cycle) in enumerate(self.pending_loads):
-            # Assume 10 cycle memory latency
-            if start_cycle + 10 <= getattr(
-                self, "current_cycle", 0
-            ):  # Need to track current cycle
+            if start_cycle + self.miss_latency <= self.current_cycle:
                 completed_loads.append(i)
+                # Fill cache with data from memory (or prefetched data)
+                prefetch_data = getattr(self, "_prefetch_data", {})
+                if addr in prefetch_data:
+                    data = prefetch_data.pop(addr)
+                else:
+                    try:
+                        raw = self.memory.read(addr, 4)
+                        data = raw[0] if isinstance(raw, list) and raw else (raw or 0)
+                    except Exception:
+                        data = 0
+                self.data_cache.add_data(addr, data)
+                logging.debug(
+                    f"Non-blocking load completed for address {addr:#x} at cycle {self.current_cycle}"
+                )
 
-        # Remove completed loads
+        # Remove completed loads in reverse order to preserve indices
         for i in reversed(completed_loads):
             self.pending_loads.pop(i)

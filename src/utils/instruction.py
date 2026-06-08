@@ -89,7 +89,21 @@ class Instruction:
 
         if opcode_upper in ["ADD", "SUB", "MUL", "DIV", "ADDI", "SUBI"]:
             return InstructionType.ARITHMETIC
-        elif opcode_upper in ["AND", "OR", "XOR", "SLT", "ANDI", "ORI", "XORI", "SLTI"]:
+        elif opcode_upper in [
+            "AND",
+            "OR",
+            "XOR",
+            "SLT",
+            "ANDI",
+            "ORI",
+            "XORI",
+            "SLTI",
+            "SLL",
+            "SRL",
+            "SRA",
+            "NOR",
+            "LUI",
+        ]:
             return InstructionType.LOGICAL
         elif opcode_upper in ["LW", "SW", "LB", "LH", "SB", "SH"]:
             return InstructionType.MEMORY
@@ -128,6 +142,7 @@ class Instruction:
             "OR",
             "XOR",
             "SLT",
+            "NOR",
             "FADD",
             "FSUB",
             "FMUL",
@@ -146,6 +161,12 @@ class Instruction:
             "LW",
             "LB",
             "LH",
+            "LUI",
+            "LI",
+            "LA",
+            "SLL",
+            "SRL",
+            "SRA",
         ]
 
     def is_s_type(self) -> bool:

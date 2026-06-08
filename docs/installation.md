@@ -298,7 +298,7 @@ pip install -r requirements-dev.txt  # Optional: for development
 ### Step 2: Verify installation
 
 ```bash
-# Run the test suite (should show 139 passing tests)
+# Run the test suite (should show 426 passing tests)
 python -m pytest tests/ -v
 
 # Run a simple simulation

@@ -54,11 +54,13 @@ class PowerParameters:
 
     # Capacitance values (pF)
     switching_capacitance: float = 100.0
-    leakage_current: float = 10.0  # nA
+    leakage_current: float = 10.0  # nA (current, temperature-adjusted)
+    base_leakage_current: float = 10.0  # nA (base value at reference temp)
 
     # Activity factors
     activity_factor: float = 0.1
     clock_gating_efficiency: float = 0.8
+    is_clock_gated: bool = False  # Whether component is currently gated
 
     # Area (mm²)
     area: float = 1.0
@@ -107,8 +109,11 @@ class ComponentPowerModel:
         voltage = self.params.voltage
         frequency = self.params.frequency * 1e9  # Convert GHz to Hz
 
-        # Apply clock gating
-        effective_alpha = alpha * (1 - self.params.clock_gating_efficiency)
+        # Apply clock gating only when component is actually gated
+        if self.params.is_clock_gated:
+            effective_alpha = alpha * (1 - self.params.clock_gating_efficiency)
+        else:
+            effective_alpha = alpha
 
         power_watts = effective_alpha * capacitance * voltage**2 * frequency
         return power_watts * 1000  # Convert to mW
@@ -225,6 +230,7 @@ class ProcessorPowerModel:
         core_params = PowerParameters(
             switching_capacitance=200.0,
             leakage_current=50.0,
+            base_leakage_current=50.0,
             activity_factor=0.3,
             area=2.0,
         )
@@ -234,6 +240,7 @@ class ProcessorPowerModel:
         l1i_params = PowerParameters(
             switching_capacitance=50.0,
             leakage_current=20.0,
+            base_leakage_current=20.0,
             activity_factor=0.8,  # High activity for instruction fetch
             area=0.5,
         )
@@ -243,6 +250,7 @@ class ProcessorPowerModel:
         l1d_params = PowerParameters(
             switching_capacitance=80.0,
             leakage_current=30.0,
+            base_leakage_current=30.0,
             activity_factor=0.4,
             area=0.8,
         )
@@ -252,6 +260,7 @@ class ProcessorPowerModel:
         l2_params = PowerParameters(
             switching_capacitance=300.0,
             leakage_current=100.0,
+            base_leakage_current=100.0,
             activity_factor=0.1,  # Lower activity, accessed on L1 miss
             area=4.0,
         )
@@ -262,6 +271,7 @@ class ProcessorPowerModel:
             unit_params = PowerParameters(
                 switching_capacitance=150.0 if unit_type == "FPU" else 100.0,
                 leakage_current=40.0,
+                base_leakage_current=40.0,
                 activity_factor=0.2,
                 area=1.5 if unit_type == "FPU" else 1.0,
             )
@@ -337,6 +347,7 @@ class ProcessorPowerModel:
         # Adjust clock gating efficiency
         efficiency = 0.9 if gated else 0.0
         self.components[component].params.clock_gating_efficiency = efficiency
+        self.components[component].params.is_clock_gated = gated
 
         # Set power state
         state = PowerState.IDLE if gated else PowerState.ACTIVE
@@ -363,11 +374,13 @@ class ProcessorPowerModel:
             total_power_watts * self.thermal_resistance
         )
 
-        # Apply temperature-dependent leakage scaling
+        # Apply temperature-dependent leakage scaling (recalculate from base, don't accumulate)
         for component in self.components.values():
             # Leakage increases exponentially with temperature
             temp_factor = math.exp((self.current_temperature - 25) / 100)
-            component.params.leakage_current *= temp_factor
+            component.params.leakage_current = (
+                component.params.base_leakage_current * temp_factor
+            )
 
     def advance_cycle(self) -> None:
         """Advance power model by one cycle."""
@@ -479,3 +492,5 @@ class ProcessorPowerModel:
             component.dynamic_energy = 0.0
             component.static_energy = 0.0
             component.state_cycles = dict.fromkeys(PowerState, 0)
+            # Reset leakage current to base value
+            component.params.leakage_current = component.params.base_leakage_current
