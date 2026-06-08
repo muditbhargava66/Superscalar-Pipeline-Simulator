@@ -20,29 +20,54 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r requirements.txt -r requirements-dev.txt
 
     - name: Run Benchmarks
       run: |
         python run_benchmarks.py
 
+    - name: Upload benchmark artifacts
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: benchmark-results
+        path: |
+          artifacts/benchmark_comparison.png
+          artifacts/stall_breakdown.png
+          artifacts/benchmark_results.md
+
     - name: Comment PR with Benchmark Results
+      if: always()
       uses: actions/github-script@v9
       with:
         script: |
           const fs = require('fs');
-          const reportPath = 'artifacts/benchmark_results.md';
-          
-          if (fs.existsSync(reportPath)) {
+
+          // Use the lightweight PR comment file (no base64 images)
+          const commentPath = 'artifacts/benchmark_pr_comment.md';
+          const fallbackPath = 'artifacts/benchmark_results.md';
+
+          let reportPath = fs.existsSync(commentPath) ? commentPath : fallbackPath;
+
+          if (reportPath && fs.existsSync(reportPath)) {
             const reportContent = fs.readFileSync(reportPath, 'utf8');
-            
-            // Post the content as a comment
+
+            // Truncate to GitHub's comment size limit (65536 chars)
+            const body = reportContent.length > 65000
+              ? reportContent.substring(0, 65000) + "\n\n_(truncated — see artifacts for full report)_"
+              : reportContent;
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: "### Automated Benchmark Report\n\n" + reportContent
+              body: "### Automated Benchmark Report\n\n" + body
             });
           } else {
-            console.log("Benchmark report not found.");
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "Benchmark report could not be generated. Check workflow logs for errors."
+            });
           }

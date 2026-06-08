@@ -1,7 +1,22 @@
-import glob
-import os
+#!/usr/bin/env python3
+"""
+Benchmark runner for Superscalar Pipeline Simulator.
+
+Runs all assembly benchmarks and generates:
+- artifacts/benchmark_results.md  (markdown report with metrics table)
+- artifacts/benchmark_comparison.png  (2x2 core metrics grid)
+- artifacts/stall_breakdown.png  (stacked bar chart of stall causes)
+"""
+
+# Force non-interactive matplotlib backend BEFORE importing pyplot.
+# This prevents failures in headless CI environments (no $DISPLAY).
+import matplotlib
+
+matplotlib.use("Agg")
+
 from pathlib import Path
 import sys
+import traceback
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,10 +29,17 @@ def run_all_benchmarks():
     benchmark_dir = Path("benchmarks")
     asm_files = list(benchmark_dir.glob("**/*.asm"))
 
+    if not asm_files:
+        print("ERROR: No .asm benchmark files found in benchmarks/")
+        sys.exit(1)
+
+    print(f"Found {len(asm_files)} benchmarks")
+
     results_data = []
+    errors = []
 
     for asm_file in sorted(asm_files):
-        print(f"Running benchmark: {asm_file.name}...")
+        print(f"Running benchmark: {asm_file.name}...", flush=True)
         try:
             simulator = SuperscalarSimulator("config.yaml")
             simulator.load_program(str(asm_file))
@@ -26,8 +48,7 @@ def run_all_benchmarks():
             # Extract hazard stats
             hazard_stats = res.get("hazard_stats", {})
             stalls_by_reason = hazard_stats.get("stalls_by_reason", {})
-            # Ensure keys exist or default to 0
-            # StallReason enum strings might be represented as strings or Enums. Let's convert to string keys.
+            # StallReason enum keys → string keys (last component after '.')
             stall_dict = {str(k).split(".")[-1]: v for k, v in stalls_by_reason.items()}
 
             data_hazards = stall_dict.get("DATA_HAZARD", 0)
@@ -54,21 +75,37 @@ def run_all_benchmarks():
                 }
             )
         except Exception as e:
-            print(f"Error running {asm_file.name}: {e}")
+            # Print full traceback so CI logs show exactly what failed
+            print(f"ERROR running {asm_file.name}: {e}", file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
+            errors.append({"name": asm_file.name, "error": str(e)})
 
-    # Extract arrays for plotting
+    # ---- Plotting (only if we have results) ----
+    Path("artifacts").mkdir(parents=True, exist_ok=True)
+
+    if results_data:
+        _generate_plots(results_data)
+    else:
+        print("WARNING: No benchmark results to plot.", file=sys.stderr, flush=True)
+
+    # ---- Markdown report ----
+    _generate_report(results_data, errors)
+
+
+def _generate_plots(results_data: list[dict]) -> None:
+    """Generate benchmark comparison PNG charts."""
     names = [r["name"] for r in results_data]
     ipcs = [r["ipc"] for r in results_data]
     accuracies = [r["branch_accuracy"] for r in results_data]
     cache_hits = [r["cache_hit_rate"] for r in results_data]
     energies = [r["energy_pJ"] for r in results_data]
 
-    # --- FIGURE 1: 2x2 Core Metrics Grid ---
     plt.style.use("dark_background")
+    x = np.arange(len(names))
+
+    # --- FIGURE 1: 2x2 Core Metrics Grid ---
     fig, axs = plt.subplots(2, 2, figsize=(16, 12))
     fig.suptitle("Superscalar Pipeline Simulator Benchmark Results", fontsize=16)
-
-    x = np.arange(len(names))
 
     # Top-Left: IPC
     axs[0, 0].bar(x, ipcs, color="#4EC9B0")
@@ -101,9 +138,6 @@ def run_all_benchmarks():
     axs[1, 1].grid(axis="y", linestyle="--", alpha=0.3)
 
     plt.tight_layout()
-
-    # Save graph 1
-    Path("artifacts").mkdir(parents=True, exist_ok=True)
     graph_path = "artifacts/benchmark_comparison.png"
     plt.savefig(graph_path, dpi=300, bbox_inches="tight")
     plt.close()
@@ -153,19 +187,52 @@ def run_all_benchmarks():
     plt.close()
     print(f"Stall graph saved to {stall_graph_path}")
 
-    # Save markdown report
-    report_path = "artifacts/benchmark_results.md"
-    with open(report_path, "w") as f:
+
+def _generate_report(results_data: list[dict], errors: list[dict]) -> None:
+    """Generate two markdown reports:
+    - artifacts/benchmark_results.md      (full local report with image links)
+    - artifacts/benchmark_pr_comment.md   (lightweight text-only for PR comments)
+    """
+    # ---- Full local report (references local PNG files) ----
+    full_path = "artifacts/benchmark_results.md"
+    with open(full_path, "w", encoding="utf-8") as f:
         f.write("# Benchmark Suite Results\n\n")
         f.write("![Benchmark Comparison](benchmark_comparison.png)\n\n")
         f.write("![Stall Breakdown](stall_breakdown.png)\n\n")
-        f.write("## Detailed Metrics\n\n")
+        _write_table(f, results_data)
+        _write_errors(f, errors)
+    print(f"Report saved to {full_path}")
+
+    # ---- Lightweight PR comment report (no images, text only) ----
+    pr_path = "artifacts/benchmark_pr_comment.md"
+    with open(pr_path, "w", encoding="utf-8") as f:
+        f.write("**Superscalar Pipeline Simulator — Benchmark Results**\n\n")
+        _write_table(f, results_data)
+        if errors:
+            f.write(
+                f"\n**{len(errors)} benchmark(s) failed.** "
+                "See workflow logs for full tracebacks.\n\n"
+            )
+            _write_errors(f, errors)
         f.write(
-            "| Benchmark | IPC | Cycles | Branch Accuracy | Cache Hit Rate | EPI (pJ) | Total Stalls |\n"
+            "\n_Full visual report (PNG charts) available as a downloadable "
+            "workflow artifact._\n"
         )
-        f.write(
-            "|-----------|-----|--------|-----------------|----------------|----------|--------------|\n"
-        )
+    print(f"PR comment report saved to {pr_path}")
+
+
+def _write_table(f, results_data: list[dict]) -> None:
+    """Write the benchmark metrics table to a file handle."""
+    f.write("## Detailed Metrics\n\n")
+    f.write(
+        "| Benchmark | IPC | Cycles | Branch Accuracy "
+        "| Cache Hit Rate | EPI (pJ) | Total Stalls |\n"
+    )
+    f.write(
+        "|-----------|-----|--------|-----------------"
+        "|----------------|----------|--------------|\n"
+    )
+    if results_data:
         for r in results_data:
             total_stalls = (
                 r["stalls_data"]
@@ -174,10 +241,24 @@ def run_all_benchmarks():
                 + r["stalls_cache"]
             )
             f.write(
-                f"| {r['name']} | {r['ipc']:.3f} | {r['cycles']} | {r['branch_accuracy']:.1f}% | {r['cache_hit_rate']:.1f}% | {r['energy_pJ']:.1f} | {total_stalls} |\n"
+                f"| {r['name']} | {r['ipc']:.3f} | {r['cycles']} | "
+                f"{r['branch_accuracy']:.1f}% | {r['cache_hit_rate']:.1f}% | "
+                f"{r['energy_pJ']:.1f} | {total_stalls} |\n"
             )
+    else:
+        f.write("| *No benchmarks completed successfully* | | | | | | |\n")
 
-    print(f"Report saved to {report_path}")
+
+def _write_errors(f, errors: list[dict]) -> None:
+    """Write an error table to a file handle."""
+    if not errors:
+        return
+    f.write("\n## Errors\n\n")
+    f.write("| Benchmark | Error |\n")
+    f.write("|-----------|-------|\n")
+    for e in errors:
+        safe_error = e["error"].replace("|", "\\|")
+        f.write(f"| {e['name']} | {safe_error} |\n")
 
 
 if __name__ == "__main__":
