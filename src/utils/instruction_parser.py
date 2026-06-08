@@ -30,6 +30,68 @@ class RegisterType(Enum):
     SPECIAL = "special"  # $hi, $lo, $pc
 
 
+# Canonical MIPS register mapping — single source of truth for all modules
+MIPS_REGISTER_MAP = {
+    "zero": 0,
+    "at": 1,
+    "v0": 2,
+    "v1": 3,
+    "a0": 4,
+    "a1": 5,
+    "a2": 6,
+    "a3": 7,
+    "t0": 8,
+    "t1": 9,
+    "t2": 10,
+    "t3": 11,
+    "t4": 12,
+    "t5": 13,
+    "t6": 14,
+    "t7": 15,
+    "s0": 16,
+    "s1": 17,
+    "s2": 18,
+    "s3": 19,
+    "s4": 20,
+    "s5": 21,
+    "s6": 22,
+    "s7": 23,
+    "t8": 24,
+    "t9": 25,
+    "k0": 26,
+    "k1": 27,
+    "gp": 28,
+    "sp": 29,
+    "fp": 30,
+    "ra": 31,
+}
+
+
+def parse_register(reg_str: str | int) -> int:
+    """
+    Parse register string to register number.
+
+    Canonical implementation used by all simulator modules.
+    Handles '$'-prefixed, named, and numeric register formats.
+    Accepts both strings and integers (for operand values that may
+    be immediates rather than registers).  Returns 0 for unknown
+    or out-of-range values (safe default = $zero).
+    """
+    # Guard against int operands (e.g. LUI immediate passed as operand)
+    if isinstance(reg_str, int):
+        return reg_str if 0 <= reg_str <= 31 else 0
+    s = str(reg_str).strip()
+    if s.startswith("$"):
+        s = s[1:]
+    if s in MIPS_REGISTER_MAP:
+        return MIPS_REGISTER_MAP[s]
+    if s.isdigit():
+        reg_num = int(s)
+        if 0 <= reg_num <= 31:
+            return reg_num
+    return 0  # Default to $zero for unknown registers
+
+
 class InstructionFormat(Enum):
     """MIPS instruction formats."""
 
@@ -775,18 +837,13 @@ class MIPSInstructionParser:
         )
 
     def _parse_register(self, reg_str: str) -> int:
-        """Parse register name to register number."""
+        """Parse register name to register number. Delegates to canonical parse_register."""
         reg_str = reg_str.strip()
+        # First check the full register map (includes $-prefixed names)
         if reg_str in self.register_map:
             return self.register_map[reg_str]
-
-        # Try parsing as direct number
-        if reg_str.startswith("$") and reg_str[1:].isdigit():
-            reg_num = int(reg_str[1:])
-            if 0 <= reg_num <= 31:
-                return reg_num
-
-        raise ValueError(f"Invalid register: {reg_str}")
+        # Fall back to canonical module-level function
+        return parse_register(reg_str)
 
     def _parse_immediate(self, imm_str: str) -> int:
         """Parse immediate value."""
@@ -809,7 +866,7 @@ class MIPSInstructionParser:
         if target_str in labels:
             # Calculate relative offset
             target_addr = labels[target_str]
-            return (target_addr - current_addr - 4) // 4
+            return int((target_addr - current_addr - 4) / 4)
         else:
             # Direct offset
             return self._parse_immediate(target_str)

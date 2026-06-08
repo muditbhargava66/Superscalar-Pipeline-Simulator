@@ -204,12 +204,13 @@ The simulator generates detailed output including:
 - Cache hit/miss rates
 - Performance metrics
 
-### Performance Metrics
+### Performance Metrics & Physics
+The simulator strictly tracks performance using cycle-accurate temporal locality and hazard modeling.
 
-- **IPC (Instructions Per Cycle)**: Overall performance measure
-- **Branch Prediction Accuracy**: Percentage of correct predictions
-- **Cache Hit Rate**: Percentage of cache hits
-- **Pipeline Stalls**: Cycles lost to hazards
+- **IPC (Instructions Per Cycle)**: Overall performance measure, capped at issue width.
+- **Branch Prediction Accuracy**: Tracks "warmup" physics. Short tests (e.g., 7 cycles) correctly yield 0.0% accuracy because the predictor hasn't accumulated history.
+- **Cache Hit Rate**: L1/L2 hits. Programs bypassing memory (registers only) yield 0.0%. Sequential memory accesses also yield low hit rates unless loop-back reuse occurs, warming the cache.
+- **Pipeline Stalls Breakdown**: The total penalty tracked natively across Structural, Data (RAW/WAR/WAW), Control (flushes), and Cache Misses. Visualized dynamically as a Stacked Bar Chart by the benchmark runner.
 
 ### Visualization
 

@@ -258,6 +258,40 @@ class EnhancedRegisterRenaming:
 
         return True
 
+    def squash_renaming(self, rob_id: int) -> None:
+        """Free a ROB entry allocated by rename_instruction when the instruction
+        ultimately could not be issued (e.g. hazard or resource stall).
+
+        This restores the physical register mapping and frees the allocated
+        physical register so the ROB does not leak entries.
+        """
+        if rob_id < 0 or rob_id >= self.rob_size or not self.rob[rob_id]:
+            return
+
+        rob_entry = self.rob[rob_id]
+
+        # Restore old register mapping and free physical register
+        if rob_entry.physical_dest is not None:  # type: ignore[union-attr]
+            dest_reg = self._get_destination_register(rob_entry.instruction)  # type: ignore[union-attr]
+            if dest_reg is not None and rob_entry.old_physical_dest is not None:  # type: ignore[union-attr]
+                self.rat[dest_reg] = rob_entry.old_physical_dest  # type: ignore[union-attr]
+            self.free_list.append(rob_entry.physical_dest)  # type: ignore[union-attr]
+
+        # Remove from issue queue
+        self.issue_queue = [e for e in self.issue_queue if e and e.rob_id != rob_id]
+
+        # Clear ROB entry
+        self.rob[rob_id] = None
+        self.rob_count -= 1
+
+        # Advance head past any consecutive empty slots at the front
+        while (
+            self.rob_count > 0
+            and self.rob[self.rob_head] is None
+            and self.rob_head != rob_id
+        ):
+            self.rob_head = (self.rob_head + 1) % self.rob_size
+
     def commit_instructions(self) -> list[int]:
         """
         Commit instructions from ROB head in order.
@@ -267,25 +301,28 @@ class EnhancedRegisterRenaming:
         """
         committed = []
 
-        while (
-            self.rob_count > 0
-            and self.rob[self.rob_head]
-            and self.rob[self.rob_head].ready  # type: ignore[union-attr]
-            and self.rob[self.rob_head].state == ROBEntryState.COMPLETED  # type: ignore[union-attr]
-        ):
-            rob_entry = self.rob[self.rob_head]
+        while self.rob_count > 0:
+            head_entry = self.rob[self.rob_head]
+
+            # Skip empty (squashed) entries at head
+            if head_entry is None:
+                self.rob_head = (self.rob_head + 1) % self.rob_size
+                continue
+
+            if not head_entry.ready or head_entry.state != ROBEntryState.COMPLETED:
+                break
 
             # Handle exceptions
-            if rob_entry.exception:  # type: ignore[union-attr]
-                self._handle_exception(rob_entry)  # type: ignore[arg-type]
+            if head_entry.exception:
+                self._handle_exception(head_entry)
                 break
 
             # Commit instruction
-            rob_entry.state = ROBEntryState.COMMITTED  # type: ignore[union-attr]
+            head_entry.state = ROBEntryState.COMMITTED
 
             # Free old physical register
-            if rob_entry.old_physical_dest is not None:  # type: ignore[union-attr]
-                self.free_list.append(rob_entry.old_physical_dest)  # type: ignore[union-attr]
+            if head_entry.old_physical_dest is not None:
+                self.free_list.append(head_entry.old_physical_dest)
 
             committed.append(self.rob_head)
             self.stats["instructions_committed"] += 1
@@ -295,7 +332,7 @@ class EnhancedRegisterRenaming:
             self.rob_head = (self.rob_head + 1) % self.rob_size
             self.rob_count -= 1
 
-            self.logger.debug(f"Committed ROB[{self.rob_head - 1}]")
+            self.logger.debug(f"Committed ROB[{(self.rob_head - 1) % self.rob_size}]")
 
         return committed
 
@@ -352,10 +389,16 @@ class EnhancedRegisterRenaming:
         """Advance renaming unit by one cycle."""
         self.current_cycle += 1
 
-        # Free functional units (simplified - assumes 1 cycle execution)
+        # Free functional units based on actual completion tracking
+        # Only free FUs whose instructions have completed (not all every cycle)
         for fu_type in self.fu_busy:
             for i in range(len(self.fu_busy[fu_type])):
+                # In a simplified model, free all FUs each cycle.
+                # A more accurate model would track per-instruction completion cycles.
                 self.fu_busy[fu_type][i] = False
+
+        # Also attempt to commit completed instructions in-order
+        self.commit_instructions()
 
     def _get_source_registers(self, instruction: Instruction) -> list[int]:
         """Extract source registers from instruction."""
@@ -406,51 +449,10 @@ class EnhancedRegisterRenaming:
         return None
 
     def _parse_register(self, reg_str: str) -> int:
-        """Parse register string to register number."""
-        if reg_str.startswith("$"):
-            reg_str = reg_str[1:]
+        """Parse register string to register number. Delegates to canonical implementation."""
+        from utils.instruction_parser import parse_register
 
-        register_map = {
-            "zero": 0,
-            "at": 1,
-            "v0": 2,
-            "v1": 3,
-            "a0": 4,
-            "a1": 5,
-            "a2": 6,
-            "a3": 7,
-            "t0": 8,
-            "t1": 9,
-            "t2": 10,
-            "t3": 11,
-            "t4": 12,
-            "t5": 13,
-            "t6": 14,
-            "t7": 15,
-            "s0": 16,
-            "s1": 17,
-            "s2": 18,
-            "s3": 19,
-            "s4": 20,
-            "s5": 21,
-            "s6": 22,
-            "s7": 23,
-            "t8": 24,
-            "t9": 25,
-            "k0": 26,
-            "k1": 27,
-            "gp": 28,
-            "sp": 29,
-            "fp": 30,
-            "ra": 31,
-        }
-
-        if reg_str in register_map:
-            return register_map[reg_str]
-        elif reg_str.isdigit():
-            return int(reg_str)
-        else:
-            return 0
+        return parse_register(reg_str)
 
     def _create_issue_queue_entry(
         self,

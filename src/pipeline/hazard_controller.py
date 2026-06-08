@@ -234,6 +234,20 @@ class HazardController:
                     # Release resources
                     self._release_resources(instr_state.instruction, instr_id)
 
+                    # Clean up register dependency tracking so stale producers
+                    # don't block future RAW checks on the same register.
+                    completed_src = self._get_source_registers(instr_state.instruction)
+                    completed_dst = self._get_destination_registers(
+                        instr_state.instruction
+                    )
+                    for reg in completed_dst:
+                        if self.register_producers.get(reg) == instr_id:
+                            del self.register_producers[reg]
+                    for reg in completed_src:
+                        consumer_list = self.register_consumers.get(reg, [])
+                        if instr_id in consumer_list:
+                            consumer_list.remove(instr_id)
+
                     # Move to completed list
                     self.completed_instructions.append(instr_state)
                     del self.instructions_in_flight[instr_id]
@@ -248,6 +262,41 @@ class HazardController:
                 self.stats["stall_cycles"] += 1  # type: ignore[operator]
 
         return completed
+
+    def flush_instructions(self, instruction_ids: list[int]) -> None:
+        """
+        Flush (squash) instructions from the pipeline.
+
+        Called on branch misprediction or pipeline flush to remove
+        instructions that should not complete.
+
+        Args:
+            instruction_ids: List of instruction IDs to flush
+        """
+        for instr_id in instruction_ids:
+            instr_state = self.instructions_in_flight.pop(instr_id, None)
+            if instr_state is not None:
+                # Clean up register dependency tracking
+                src_regs = self._get_source_registers(instr_state.instruction)
+                dst_regs = self._get_destination_registers(instr_state.instruction)
+                for reg in dst_regs:
+                    if self.register_producers.get(reg) == instr_id:
+                        del self.register_producers[reg]
+                for reg in src_regs:
+                    consumers = self.register_consumers.get(reg, [])
+                    if instr_id in consumers:
+                        consumers.remove(instr_id)
+
+                # Release allocated resources
+                self._release_resources(instr_state.instruction, instr_id)
+
+                # Remove from stage occupancy
+                for stage_ids in self.stage_occupancy.values():
+                    stage_ids.discard(instr_id)
+
+                self.logger.debug(
+                    f"Flushed instruction {instr_state.instruction.opcode} (ID: {instr_id})"
+                )
 
     def _detect_hazards(
         self, instruction: Instruction, instruction_id: int
@@ -435,7 +484,9 @@ class HazardController:
         """Advance instruction to next pipeline stage."""
         # Remove from current stage
         if instr_state.current_stage in self.stage_occupancy:
-            self.stage_occupancy[instr_state.current_stage].discard(id(instr_state))
+            self.stage_occupancy[instr_state.current_stage].discard(
+                instr_state.issue_cycle
+            )
 
         # Advance to next stage
         stage_order = [
@@ -452,8 +503,8 @@ class HazardController:
             instr_state.current_stage = stage_order[current_index + 1]
             instr_state.stage_entry_cycle = self.current_cycle
 
-            # Add to new stage
-            self.stage_occupancy[instr_state.current_stage].add(id(instr_state))
+            # Add to new stage (use instruction ID, not Python id())
+            self.stage_occupancy[instr_state.current_stage].add(instr_state.issue_cycle)
 
         # Reset stall state
         instr_state.stalled = False
@@ -505,8 +556,20 @@ class HazardController:
         src_regs = []
 
         # Extract source registers from operands based on instruction type
-        if instruction.instruction_type == InstructionType.ARITHMETIC:
-            # For R-type: operands = [rd, rs, rt] -> sources are rs, rt
+        itype = instruction.instruction_type
+        opcode = instruction.opcode.upper()
+        is_store = opcode in ["SW", "SB", "SH"]
+        is_memory = itype == InstructionType.MEMORY or itype in [
+            InstructionType.LOAD,
+            InstructionType.STORE,
+        ]
+
+        if itype in [
+            InstructionType.ARITHMETIC,
+            InstructionType.LOGICAL,
+            InstructionType.COMPARISON,
+        ]:
+            # R-type: operands = [rd, rs, rt] -> sources are rs, rt
             if len(instruction.operands) >= 3:
                 src_regs.extend(
                     [
@@ -514,30 +577,29 @@ class HazardController:
                         self._parse_register(instruction.operands[2]),
                     ]
                 )
-        elif instruction.instruction_type in [
-            InstructionType.LOAD,
-            InstructionType.STORE,
-        ]:
+            elif len(instruction.operands) >= 2:
+                # I-type: operands = [rd, rs, imm] -> source is rs
+                src_regs.append(self._parse_register(str(instruction.operands[1])))
+        elif is_memory:
             # For memory: operands = [rt, "offset(rs)"] -> source is rs (and rt for store)
             if len(instruction.operands) >= 2:
                 # Parse "offset(rs)" format
-                addr_operand = instruction.operands[1]
+                addr_operand = str(instruction.operands[1])
                 if "(" in addr_operand:
                     rs_part = addr_operand.split("(")[1].rstrip(")")
                     src_regs.append(self._parse_register(rs_part))
 
                 # For STORE, the register being stored (rt) is also a source
-                if instruction.instruction_type == InstructionType.STORE:
-                    src_regs.append(self._parse_register(instruction.operands[0]))
-        elif instruction.instruction_type == InstructionType.BRANCH:
-            # For branch: operands = [rs, rt, target] -> sources are rs, rt
+                if is_store:
+                    src_regs.append(self._parse_register(str(instruction.operands[0])))
+        elif itype == InstructionType.BRANCH:
+            # For branch: operands = [rs, rt, target] or [rs, target]
             if len(instruction.operands) >= 2:
-                src_regs.extend(
-                    [
-                        self._parse_register(instruction.operands[0]),
-                        self._parse_register(instruction.operands[1]),
-                    ]
-                )
+                # Try to parse first two operands as registers
+                src_regs.append(self._parse_register(str(instruction.operands[0])))
+                # Second operand might be rt (for BEQ/BNE) or offset (for BLTZ/BGEZ)
+                if len(instruction.operands) >= 3:
+                    src_regs.append(self._parse_register(str(instruction.operands[1])))
 
         return src_regs
 
@@ -549,67 +611,35 @@ class HazardController:
         if instruction.destination:
             dst_regs.append(self._parse_register(instruction.destination))
         elif (
-            instruction.instruction_type == InstructionType.ARITHMETIC
+            instruction.instruction_type
+            in [
+                InstructionType.ARITHMETIC,
+                InstructionType.LOGICAL,
+                InstructionType.COMPARISON,
+            ]
             and instruction.operands
         ):
             # For R-type: operands = [rd, rs, rt] -> destination is rd
-            dst_regs.append(self._parse_register(instruction.operands[0]))
+            dst_regs.append(self._parse_register(str(instruction.operands[0])))
         elif (
-            instruction.instruction_type == InstructionType.LOAD
+            instruction.instruction_type
+            in [
+                InstructionType.MEMORY,
+                InstructionType.LOAD,
+            ]
+            and instruction.opcode.upper() not in ["SW", "SB", "SH"]
             and instruction.operands
         ):
             # For load: operands = [rt, "offset(rs)"] -> destination is rt
-            dst_regs.append(self._parse_register(instruction.operands[0]))
+            dst_regs.append(self._parse_register(str(instruction.operands[0])))
 
         return dst_regs
 
     def _parse_register(self, reg_str: str) -> int:
-        """Parse register string to register number."""
-        if reg_str.startswith("$"):
-            reg_str = reg_str[1:]
+        """Parse register string to register number. Delegates to canonical implementation."""
+        from utils.instruction_parser import parse_register
 
-        # Handle named registers
-        register_map = {
-            "zero": 0,
-            "at": 1,
-            "v0": 2,
-            "v1": 3,
-            "a0": 4,
-            "a1": 5,
-            "a2": 6,
-            "a3": 7,
-            "t0": 8,
-            "t1": 9,
-            "t2": 10,
-            "t3": 11,
-            "t4": 12,
-            "t5": 13,
-            "t6": 14,
-            "t7": 15,
-            "s0": 16,
-            "s1": 17,
-            "s2": 18,
-            "s3": 19,
-            "s4": 20,
-            "s5": 21,
-            "s6": 22,
-            "s7": 23,
-            "t8": 24,
-            "t9": 25,
-            "k0": 26,
-            "k1": 27,
-            "gp": 28,
-            "sp": 29,
-            "fp": 30,
-            "ra": 31,
-        }
-
-        if reg_str in register_map:
-            return register_map[reg_str]
-        elif reg_str.isdigit():
-            return int(reg_str)
-        else:
-            return 0  # Default to $zero for unknown registers
+        return parse_register(reg_str)
 
     def _get_required_functional_unit(self, instruction: Instruction) -> str | None:
         """Get required functional unit type for instruction."""
@@ -618,6 +648,7 @@ class HazardController:
         elif instruction.instruction_type in [
             InstructionType.LOAD,
             InstructionType.STORE,
+            InstructionType.MEMORY,
         ]:
             return "LSU"
         elif instruction.instruction_type in [
@@ -630,6 +661,10 @@ class HazardController:
             InstructionType.LOGICAL,
             InstructionType.COMPARISON,
         ]:
+            # Check if it's a shift operation (could use dedicated shifter)
+            opcode = instruction.opcode.lower()
+            if opcode in ("sll", "srl", "sra"):
+                return "ALU"  # Shifts handled by ALU in this configuration
             return "ALU"
         return None
 

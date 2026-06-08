@@ -9,6 +9,7 @@ timing models, resource usage, and state management.
 
 from enum import Enum
 import logging
+import struct
 from typing import Any, List, Optional
 
 # Handle imports for both package and direct execution
@@ -48,7 +49,7 @@ class ExecutionResult(Enum):
 class ExecutionState:
     """Represents the execution state of an instruction."""
 
-    def __init__(self, instruction: Instruction):
+    def __init__(self, instruction: Instruction) -> None:
         self.instruction = instruction
         self.cycles_remaining = instruction.latency
         self.started_cycle = -1
@@ -68,7 +69,13 @@ class CycleAccurateExecutionEngine:
     resource contention, and state management.
     """
 
-    def __init__(self, register_file, memory, data_cache, memory_hierarchy=None):
+    def __init__(
+        self,
+        register_file: Any,
+        memory: Any,
+        data_cache: Any,
+        memory_hierarchy: Any = None,
+    ) -> None:
         """
         Initialize the execution engine.
 
@@ -100,6 +107,14 @@ class CycleAccurateExecutionEngine:
             "cache_misses": 0,
             "cache_stall_cycles": 0,
             "pipeline_stalls": 0,
+        }
+
+        # Functional unit capacity by type (mirrors real superscalar FU port limits)
+        self.fu_capacity: dict[str, int] = {
+            "ALU": 2,  # 2 integer ALUs
+            "FPU": 1,  # 1 floating-point unit
+            "LSU": 2,  # 2 load/store units
+            "BRU": 1,  # 1 branch unit
         }
 
         # Initialize execution handlers
@@ -245,6 +260,8 @@ class CycleAccurateExecutionEngine:
             return ExecutionResult.SUCCESS, quotient
         elif opcode in ["li", "la"]:
             result = imm_val
+        elif opcode == "lui":
+            result = imm_val << 16
         elif opcode == "move":
             result = rs_val
         else:
@@ -295,7 +312,10 @@ class CycleAccurateExecutionEngine:
         elif opcode == "srl":
             result = rt_val >> imm_val
         elif opcode == "sra":
-            result = rt_val >> imm_val  # Arithmetic shift
+            # Arithmetic shift right: sign-extend 32-bit value before shifting
+            signed_val = rt_val if rt_val < 0x80000000 else rt_val - 0x100000000
+            result = signed_val >> imm_val
+            result = result & 0xFFFFFFFF  # Mask to 32 bits
         elif opcode == "lui":
             result = imm_val << 16
         else:
@@ -430,6 +450,10 @@ class CycleAccurateExecutionEngine:
         rs_val = self._get_rs_value(instruction)
         rt_val = self._get_rt_value(instruction)
 
+        # Sign-extend to 32-bit for signed branch comparisons
+        # (register file stores unsigned 32-bit values)
+        rs_signed = rs_val if rs_val < 0x80000000 else rs_val - 0x100000000
+
         # Evaluate branch condition
         taken = False
         opcode = instruction.opcode.lower()
@@ -438,13 +462,13 @@ class CycleAccurateExecutionEngine:
         elif opcode == "bne":
             taken = rs_val != rt_val
         elif opcode == "blez":
-            taken = rs_val <= 0
+            taken = rs_signed <= 0
         elif opcode == "bgtz":
-            taken = rs_val > 0
+            taken = rs_signed > 0
         elif opcode == "bltz":
-            taken = rs_val < 0
+            taken = rs_signed < 0
         elif opcode == "bgez":
-            taken = rs_val >= 0
+            taken = rs_signed >= 0
 
         exec_state.branch_taken = taken
 
@@ -495,12 +519,67 @@ class CycleAccurateExecutionEngine:
     def _execute_floating_point(
         self, exec_state: ExecutionState
     ) -> tuple[ExecutionResult, Any]:
-        """Execute floating point instruction (simplified)."""
-        # Simplified floating point execution
-        # In a real implementation, this would handle IEEE 754 arithmetic
-        result = 0.0
-        exec_state.result_value = result  # type: ignore[assignment]
-        return ExecutionResult.SUCCESS, result
+        """Execute floating point instruction with IEEE 754 arithmetic."""
+        instruction = exec_state.instruction
+        opcode = instruction.opcode.lower()
+
+        # Get operand values (stored as 32-bit unsigned integers)
+        rs_val = self._get_rs_value(instruction)
+        rt_val = self._get_rt_value(instruction)
+
+        # Convert integer bit patterns to IEEE 754 floats
+        rs_float = struct.unpack("f", struct.pack("I", rs_val & 0xFFFFFFFF))[0]
+        rt_float = struct.unpack("f", struct.pack("I", rt_val & 0xFFFFFFFF))[0]
+
+        if opcode == "add.s":
+            result = rs_float + rt_float
+        elif opcode == "sub.s":
+            result = rs_float - rt_float
+        elif opcode == "mul.s":
+            result = rs_float * rt_float
+        elif opcode == "div.s":
+            if rt_float == 0.0:
+                result = float("inf") if rs_float >= 0 else float("-inf")
+            else:
+                result = rs_float / rt_float
+        elif opcode == "abs.s":
+            result = abs(rs_float)
+        elif opcode == "neg.s":
+            result = -rs_float
+        elif opcode == "mov.s":
+            result = rs_float
+        elif opcode == "cvt.s.w":
+            # Convert integer to float
+            result = float(rs_val if rs_val < 0x80000000 else rs_val - 0x100000000)
+        elif opcode == "cvt.w.s":
+            # Convert float to integer
+            result_float = rs_float
+            result = int(result_float) & 0xFFFFFFFF
+            # Write result and return early (integer result, not float)
+            if instruction.destination:
+                dest_reg = self._parse_register(instruction.destination)
+                self.register_file.write_register(dest_reg, result)
+            elif instruction.operands:
+                dest_reg = self._parse_register(str(instruction.operands[0]))
+                self.register_file.write_register(dest_reg, result)
+            exec_state.result_value = result
+            return ExecutionResult.SUCCESS, result
+        else:
+            result = 0.0
+
+        # Convert IEEE 754 float result back to 32-bit integer bit pattern
+        result_bits = struct.unpack("I", struct.pack("f", result))[0]
+
+        # Write result to destination register
+        if instruction.destination:
+            dest_reg = self._parse_register(instruction.destination)
+            self.register_file.write_register(dest_reg, result_bits)
+        elif instruction.operands:
+            dest_reg = self._parse_register(str(instruction.operands[0]))
+            self.register_file.write_register(dest_reg, result_bits)
+
+        exec_state.result_value = result_bits
+        return ExecutionResult.SUCCESS, result_bits
 
     def _execute_system(
         self, exec_state: ExecutionState
@@ -528,13 +607,41 @@ class CycleAccurateExecutionEngine:
         return ExecutionResult.SUCCESS, 0
 
     def _check_resources(self, instruction: Instruction) -> bool:
-        """Check if resources are available for instruction execution."""
-        # TODO : Simplified resource checking
-        # In a real implementation, this would check functional unit availability
-        return len(self.executing_instructions) < 4  # Max 4 concurrent executions
+        """Check if resources are available for instruction execution.
+
+        Checks per-functional-unit capacity rather than a single global limit,
+        modelling real superscalar FU port constraints.
+        """
+        fu_type = self._get_fu_type(instruction)
+        # Count how many instructions of this FU type are currently executing
+        current_usage = sum(
+            1
+            for state in self.executing_instructions.values()
+            if self._get_fu_type(state.instruction) == fu_type
+        )
+        capacity = self.fu_capacity.get(fu_type, 2)
+        if current_usage >= capacity:
+            return False
+        # Also enforce a global ceiling to prevent overall over-subscription
+        return len(self.executing_instructions) < sum(self.fu_capacity.values())
+
+    def _get_fu_type(self, instruction: Instruction) -> str:
+        """Map instruction type to functional unit category."""
+        itype = instruction.instruction_type
+        if itype in (InstructionType.LOAD, InstructionType.STORE):
+            return "LSU"
+        if itype == InstructionType.FLOATING_POINT:
+            return "FPU"
+        if itype in (InstructionType.BRANCH, InstructionType.JUMP):
+            return "BRU"
+        # ARITHMETIC, LOGICAL, COMPARISON, SHIFT, NOP, SYSTEM all use ALU
+        return "ALU"
 
     def _get_rs_value(self, instruction: Instruction) -> int:
         """Get RS register value from instruction operands."""
+        # Immediate-only instructions have no register source operand.
+        if instruction.opcode.lower() in ["li", "la", "lui"]:
+            return 0
         if (
             instruction.instruction_type
             in [
@@ -642,59 +749,28 @@ class CycleAccurateExecutionEngine:
                 return int(offset_part) if offset_part else 0
         elif (
             instruction.instruction_type == InstructionType.BRANCH
-            and len(instruction.operands) >= 3
+            and len(instruction.operands) >= 2
         ):
-            # Branch: operands = [rs, rt, target] -> target is operands[2]
-            return int(instruction.operands[2])
+            # Branch: operands = [rs, rt, target] or [rs, target]
+            # For 3-operand branches (BEQ, BNE): target is operands[2]
+            # For 2-operand branches (BLTZ, BGEZ, etc.): target is operands[1]
+            if len(instruction.operands) >= 3:
+                try:
+                    return int(instruction.operands[2])
+                except (ValueError, TypeError):
+                    return 0
+            else:
+                try:
+                    return int(instruction.operands[1])
+                except (ValueError, TypeError):
+                    return 0
         return 0
 
-    def _parse_register(self, reg_str: str) -> int:
-        """Parse register string to register number."""
-        if reg_str.startswith("$"):
-            reg_str = reg_str[1:]
+    def _parse_register(self, reg_str: str | int) -> int:
+        """Parse register string to register number. Delegates to canonical implementation."""
+        from utils.instruction_parser import parse_register
 
-        # Handle named registers
-        register_map = {
-            "zero": 0,
-            "at": 1,
-            "v0": 2,
-            "v1": 3,
-            "a0": 4,
-            "a1": 5,
-            "a2": 6,
-            "a3": 7,
-            "t0": 8,
-            "t1": 9,
-            "t2": 10,
-            "t3": 11,
-            "t4": 12,
-            "t5": 13,
-            "t6": 14,
-            "t7": 15,
-            "s0": 16,
-            "s1": 17,
-            "s2": 18,
-            "s3": 19,
-            "s4": 20,
-            "s5": 21,
-            "s6": 22,
-            "s7": 23,
-            "t8": 24,
-            "t9": 25,
-            "k0": 26,
-            "k1": 27,
-            "gp": 28,
-            "sp": 29,
-            "fp": 30,
-            "ra": 31,
-        }
-
-        if reg_str in register_map:
-            return register_map[reg_str]
-        elif reg_str.isdigit():
-            return int(reg_str)
-        else:
-            return 0  # Default to $zero for unknown registers
+        return parse_register(reg_str)
 
     def _get_register_value(self, reg_num: int) -> int:
         """Get register value with proper handling of special registers."""

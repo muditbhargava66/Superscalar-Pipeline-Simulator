@@ -158,7 +158,9 @@ run-gui:
 
 benchmark:
 	@echo "Running performance benchmarks..."
-	python -m pytest tests/test_complete_pipeline.py --benchmark
+	python main.py --benchmark benchmarks/matrix_multiplication.asm --max-cycles 5000
+	@echo ""
+	python main.py --benchmark benchmarks/bubble_sort.asm --max-cycles 5000
 
 # Development workflow
 dev-setup: install-dev

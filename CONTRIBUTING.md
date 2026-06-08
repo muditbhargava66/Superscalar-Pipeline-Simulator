@@ -210,12 +210,20 @@ class BranchPredictor:
 
 ```
 tests/
-├── test_branch_prediction.py      # Branch predictor tests
-├── test_cache.py                   # Cache system tests
-├── test_complete_pipeline.py       # Integration tests
+├── conftest.py                     # pytest path configuration
+├── test_branch_predictors.py       # Branch predictor tests
+├── test_cache_system.py            # Cache system tests
 ├── test_data_forwarding.py         # Data forwarding tests
-├── test_enhanced_features.py       # Enhanced features tests
-└── test_pipeline.py                # Pipeline stage tests
+├── test_execution_engine.py        # Execution engine tests
+├── test_hazard_detection.py        # Hazard detection tests
+├── test_instruction_parser.py      # Instruction parser tests
+├── test_instructions.py            # Instruction classification tests
+├── test_performance_profiler.py    # Performance profiler tests
+├── test_pipeline_stages.py         # Pipeline stage tests
+├── test_power_model.py             # Power model tests
+├── test_register_file.py           # Register file tests
+├── test_register_renaming.py       # Register renaming tests
+└── test_simulator_integration.py   # Full simulator integration tests
 ```
 
 ### Writing Tests
@@ -255,7 +263,7 @@ def test_branch_predictor_accuracy():
 make test
 
 # Run specific test file
-python -m pytest tests/test_branch_prediction.py -v
+python -m pytest tests/test_instructions.py -v
 
 # Run with coverage
 python -m pytest --cov=src --cov-report=html

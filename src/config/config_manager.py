@@ -30,7 +30,7 @@ except (ImportError, ValueError):
 class ConfigManager:
     """Manages simulator configuration from multiple sources."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the configuration manager."""
         self._config: SimulatorConfig | None = None
         self._config_file: Path | None = None

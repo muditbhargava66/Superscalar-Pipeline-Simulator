@@ -607,10 +607,10 @@ python -m pytest tests/ -v
 python -m pytest tests/ -v --cov=src
 
 # Run specific test file
-python -m pytest tests/test_pipeline.py -v
+python -m pytest tests/test_pipeline_stages.py -v
 
 # Run specific test class
-python -m pytest tests/test_pipeline.py::TestFetchStage -v
+python -m pytest tests/test_pipeline_stages.py::TestFetchStage -v
 ```
 
 This API reference provides the foundation for using the simulator programmatically. For more detailed examples, see the `examples/` directory and the user guide.
