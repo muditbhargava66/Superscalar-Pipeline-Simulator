@@ -313,6 +313,7 @@ Note: The following features were listed in earlier versions and have since been
 - True multi-issue superscalar pipeline execution and parallel instruction dispatch (v1.3.0)
 - Complete IEEE 754 compliant floating-point arithmetic implementation (v1.3.0)
 - Cycle-accurate bounded thermal leakage power modeling and non-blocking MSHR load resolution (v1.3.0)
+- Out-of-Order Execution capabilities fixed and enabled by default (v1.4.0)
 
 ## References
 - [1] John L. Hennessy and David A. Patterson. "Computer Architecture: A Quantitative Approach" (6th Edition). Morgan Kaufmann, 2017.

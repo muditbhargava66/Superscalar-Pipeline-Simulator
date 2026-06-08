@@ -1,5 +1,5 @@
 # Superscalar Pipeline Simulator - Configuration
-# Version: 1.3.0
+# Version: 1.4.0
 # Last Updated: June 2026
 pipeline:
   num_stages: 6
@@ -21,7 +21,7 @@ execution:
   enhanced_renaming: true
   rename_bandwidth: 4     # Max instructions to rename per cycle
   commit_bandwidth: 4     # Max instructions to commit per cycle
-  ooo_execution: false     # Out-of-order execution in execute stage
+  ooo_execution: true     # Out-of-order execution in execute stage
   ooo_window_size: 16     # OOO instruction window size
   register_renaming:
     arch_registers: 32

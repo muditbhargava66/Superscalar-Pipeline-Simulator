@@ -139,7 +139,9 @@ class ComponentPowerModel:
 
         # Energy for one cycle (assuming 1 cycle = 1/frequency seconds)
         cycle_time = 1.0 / (self.params.frequency * 1e9)  # seconds
-        energy = total_power * cycle_time * 1e12  # Convert to pJ
+        energy = (
+            total_power * cycle_time * 1e9
+        )  # Convert from mW*s to pJ (1 mJ = 1e9 pJ)
 
         event = PowerEvent(
             cycle=cycle,
@@ -150,8 +152,8 @@ class ComponentPowerModel:
         )
 
         self.activity_events.append(event)
-        self.dynamic_energy += dynamic_power * cycle_time * 1e12
-        self.static_energy += static_power * cycle_time * 1e12
+        self.dynamic_energy += dynamic_power * cycle_time * 1e9
+        self.static_energy += static_power * cycle_time * 1e9
 
         if event_type != "idle":
             self.active_cycles += 1

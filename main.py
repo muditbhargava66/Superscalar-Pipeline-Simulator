@@ -236,7 +236,7 @@ class SuperscalarSimulator:
             )
 
             dcache_config = memory_config["data_cache"]
-            self.data_cache = DataCache(
+            self.data_cache: Any = DataCache(
                 cache_size=self._parse_size(dcache_config["size"]),
                 block_size=dcache_config["block_size"],
             )
@@ -256,7 +256,7 @@ class SuperscalarSimulator:
                 "commit_bandwidth",
                 self.config.get("execution", {}).get("commit_bandwidth", 4),
             )
-            self.register_renaming = AdvancedRegisterRenaming(
+            self.register_renaming: Any = AdvancedRegisterRenaming(
                 num_logical_regs=32,
                 num_physical_regs=128,
                 reorder_buffer_size=64,
@@ -327,7 +327,7 @@ class SuperscalarSimulator:
                     "mshr_count": cache_config.get("mshr_count", 8),
                     "write_policy": cache_config.get("write_policy", "write_back"),
                 }
-                self.data_cache = NonBlockingCache(nb_cache_config)  # type: ignore[assignment]
+                self.data_cache = NonBlockingCache(nb_cache_config)
 
             # Enhanced register renaming
             if self.config.get("execution", {}).get("enhanced_renaming", True):
@@ -338,7 +338,7 @@ class SuperscalarSimulator:
                 renaming_config = self.config.get("execution", {}).get(
                     "register_renaming", {}
                 )
-                self.register_renaming = EnhancedRegisterRenaming(renaming_config)  # type: ignore[assignment]
+                self.register_renaming = EnhancedRegisterRenaming(renaming_config)
 
             # Power modeling
             if self.config.get("power_modeling", {}).get("enabled", False):
@@ -347,7 +347,7 @@ class SuperscalarSimulator:
                 power_config = self.config.get("power_modeling", {})
                 self.power_model: Any = ProcessorPowerModel(power_config)
             else:
-                self.power_model = None  # type: ignore[assignment]
+                self.power_model = None
 
             # Pipeline stages
             self._initialize_pipeline_stages()
@@ -640,10 +640,7 @@ class SuperscalarSimulator:
                         InstructionType.BRANCH,
                         InstructionType.JUMP,
                     ]:
-                        try:
-                            self.branch_predictor.predict(instruction.address)
-                        except Exception:
-                            pass
+                        self.branch_predictor.predict(instruction.address)
                         # Track for later update
                         branch_instructions[instruction_id] = instruction
 
@@ -651,12 +648,9 @@ class SuperscalarSimulator:
                     rob_id: int | None = None
                     if _is_enhanced_renaming:
                         # EnhancedRegisterRenaming.rename_instruction(instruction) -> int | None
-                        try:
-                            rob_id = self.register_renaming.rename_instruction(
-                                instruction
-                            )  # type: ignore[call-arg,arg-type,assignment]
-                        except Exception:
-                            rob_id = None
+                        rob_id = self.register_renaming.rename_instruction(
+                            instruction
+                        )
                         if rob_id is None:
                             # ROB full or no free physical registers — stall
                             stall_this_cycle = True
@@ -664,23 +658,20 @@ class SuperscalarSimulator:
                     else:
                         # AdvancedRegisterRenaming.rename_instruction(id, src_regs, dst_reg)
                         #   -> tuple[bool, list[int], int | None]
-                        try:
-                            _src_strs = instruction.get_source_registers()
-                            _src_regs = [_parse_reg(str(s)) for s in _src_strs]
-                            _dst_str = instruction.get_destination_register()
-                            _dst_reg = _parse_reg(str(_dst_str)) if _dst_str else None
-                            _ok, _renamed_srcs, _renamed_dst = (
-                                self.register_renaming.rename_instruction(
-                                    instruction_id, _src_regs, _dst_reg
-                                )
+                        _src_strs = instruction.get_source_registers()
+                        _src_regs = [_parse_reg(str(s)) for s in _src_strs]
+                        _dst_str = instruction.get_destination_register()
+                        _dst_reg = _parse_reg(str(_dst_str)) if _dst_str else None
+                        _ok, _renamed_srcs, _renamed_dst = (
+                            self.register_renaming.rename_instruction(
+                                instruction_id, _src_regs, _dst_reg
                             )
-                            if not _ok:
-                                stall_this_cycle = True
-                                break
-                            # AdvancedRegisterRenaming tracks by instruction_id
-                            rob_id = instruction_id
-                        except Exception:
-                            rob_id = None
+                        )
+                        if not _ok:
+                            stall_this_cycle = True
+                            break
+                        # AdvancedRegisterRenaming tracks by instruction_id
+                        rob_id = instruction_id
 
                     # Try to issue instruction through hazard controller
                     if self.hazard_controller.issue_instruction(
@@ -713,13 +704,13 @@ class SuperscalarSimulator:
                             # Resource contention — squash the ROB entry that
                             # was optimistically allocated by rename.
                             if rob_id is not None and _is_enhanced_renaming:
-                                self.register_renaming.squash_renaming(rob_id)  # type: ignore[attr-defined]
+                                self.register_renaming.squash_renaming(rob_id)
                             stall_this_cycle = True
                     else:
                         # Hazard stall — squash the ROB entry that was
                         # optimistically allocated by rename.
                         if rob_id is not None and _is_enhanced_renaming:
-                            self.register_renaming.squash_renaming(rob_id)  # type: ignore[attr-defined]
+                            self.register_renaming.squash_renaming(rob_id)
                         stall_this_cycle = True
 
                 # Check if all instructions have been issued
@@ -749,12 +740,9 @@ class SuperscalarSimulator:
                     branch_instr = branch_instructions[exec_id]
                     actually_taken = result == ExecutionResult.BRANCH_TAKEN
 
-                    try:
-                        self.branch_predictor.update(
-                            branch_instr.address, actually_taken
-                        )
-                    except Exception:
-                        pass
+                    self.branch_predictor.update(
+                        branch_instr.address, actually_taken
+                    )
 
                     # Handle branch/jump by updating PC
                     if (
@@ -806,12 +794,9 @@ class SuperscalarSimulator:
                                 # Recover register renaming state (RAT checkpoint)
                                 branch_rob_id = instruction_rob_ids.get(exec_id)
                                 if _is_enhanced_renaming and branch_rob_id is not None:
-                                    try:
-                                        self.register_renaming.handle_branch_misprediction(
-                                            branch_rob_id
-                                        )
-                                    except Exception:
-                                        pass
+                                    self.register_renaming.handle_branch_misprediction(
+                                        branch_rob_id
+                                    )
 
             # Feed visualization snapshot periodically
             if (

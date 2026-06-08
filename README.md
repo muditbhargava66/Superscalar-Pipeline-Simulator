@@ -2,14 +2,14 @@
 
 # Superscalar Pipeline Simulator
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator/releases)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Tests](https://img.shields.io/badge/tests-426%20passing-green.svg)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen.svg)](docs/)
 
-> Superscalar pipeline simulator for computer architecture research and education. Features branch prediction, non-blocking cache systems, power modeling, and cycle-accurate simulation capabilities.
+> Superscalar pipeline simulator for computer architecture research and education. Features branch prediction, non-blocking cache systems, power modeling, and cycle-counted behavioral simulation capabilities.
 
 **[Quick Start](#quick-start)** • **[Get Started Now](docs/installation.md)** • **[View Examples](examples/)** • **[Benchmarks](#benchmarks)** • **[![Star this repository](https://img.shields.io/github/stars/muditbhargava66/superscalar-pipeline-simulator?style=social)](https://github.com/muditbhargava66/superscalar-pipeline-simulator)**
 
@@ -32,7 +32,7 @@
 - **Superscalar Execution** - True multi-issue pipeline capable of parallel dispatch to configurable ALU/FPU/LSU/BRU units
 - **Out-of-Order Execution** - Advanced reservation stations, ROB commit logic, and precise branch misprediction pipeline flushing
 - **Advanced Arithmetic** - Complete IEEE 754 floating-point unit (ADD.S, SUB.S, MUL.S, DIV.S) and precise sign-extension
-- **Multi-Level Cache Hierarchy** - Realistic L1I/L1D/L2 with cycle-accurate LRU replacement, non-blocking MSHR loads, and write-back policies
+- **Multi-Level Cache Hierarchy** - Realistic L1I/L1D/L2 with cycle-counted LRU replacement, non-blocking MSHR loads, and write-back policies
 - **Power & Thermal Modeling** - Component-level dynamic/static tracking with bounded temperature-dependent leakage models
 - **Data Forwarding** - Comprehensive bypass paths minimizing pipeline stalls
 - **Hazard Detection** - Complete RAW/WAR/WAW hazard resolution
@@ -49,7 +49,7 @@
 
 ### Capabilities
 - **Performance Analysis** - Bottleneck identification and optimization recommendations
-- **Cycle-Accurate Simulation** - Precise timing models for analysis
+- **Cycle-Counted Behavioral Simulation** - Precise timing models for architectural analysis
 - **Live Visualization** - Real-time pipeline state display with matplotlib
 - **Configuration GUI** - Tkinter-based interactive config editor
 - **Machine Learning Integration** - Advanced predictors with adaptive algorithms
@@ -167,22 +167,22 @@ Our architecture simulator leverages strict temporal locality and hazard modelin
 *   **Predictor Warmup:** Short routines (`simple_test`) finishing in 12 cycles do not provide enough branch history to train the predictor, reflecting realistic "cold state" branch prediction physics.
 *   **Stall Breakdown:** The Stall Tracking engine monitors execution delays as a stacked pipeline. The **Total Stalls** represent absolute cycle penalties distributed across Structural lockups, Data hazards (RAW/WAR), Control flushes, and Cache misses.
 
-| Benchmark | IPC | Cycles | Branch Accuracy | Cache Hit Rate | EPI (pJ) | Total Stalls |
+| Benchmark | IPC | Cycles | Branch Accuracy | Cache Hit Rate | EPI (pJ) | Issue Slot Stalls |
 |-----------|-----|--------|-----------------|----------------|----------|--------------|
-| basic_operations | 0.641 | 78 | 87.5% | 0.0% | 512920.3 | 73 |
-| bubble_sort | 1.125 | 10000 | 99.9% | 99.8% | 364067.9 | 9999 |
-| fibonacci_recursive | 1.176 | 10000 | 95.6% | 76.6% | 356803.7 | 8971 |
-| dhrystone_like | 1.041 | 10000 | 99.0% | 99.5% | 380153.9 | 8498 |
-| quicksort | 1.425 | 10000 | 99.6% | 99.6% | 322280.9 | 9394 |
-| matrix_multiplication | 1.438 | 251 | 71.4% | 84.6% | 329867.2 | 246 |
-| streaming_access | 1.333 | 10000 | 100.0% | 99.8% | 333983.7 | 9999 |
-| memory_access_patterns | 1.330 | 880 | 97.9% | 97.3% | 342269.6 | 730 |
-| compute_intensive | 1.333 | 10000 | 100.0% | 99.8% | 333988.9 | 9999 |
-| simple_arithmetic | 0.881 | 10000 | 92.7% | 99.2% | 421128.2 | 8333 |
-| simple_fibonacci | 1.111 | 10000 | 99.8% | 0.0% | 372519.8 | 9722 |
-| simple_sort | 0.913 | 23 | 100.0% | 17.6% | 409809.7 | 19 |
-| simple_test | 1.143 | 7 | 0.0% | 0.0% | 368000.2 | 3 |
-| validation_suite | 1.000 | 19 | 66.7% | 0.0% | 396737.0 | 14 |
+| basic_operations | 0.641 | 78 | 87.5% | 0.0% | 512.9 | 73 |
+| bubble_sort | 1.125 | 10000 | 99.9% | 99.8% | 364.1 | 9999 |
+| fibonacci_recursive | 1.176 | 10000 | 95.6% | 76.6% | 356.8 | 8971 |
+| dhrystone_like | 1.041 | 10000 | 99.0% | 99.5% | 380.2 | 8498 |
+| quicksort | 1.425 | 10000 | 99.6% | 99.6% | 322.3 | 9394 |
+| matrix_multiplication | 1.438 | 251 | 71.4% | 84.6% | 329.9 | 246 |
+| streaming_access | 1.333 | 10000 | 100.0% | 99.8% | 334.0 | 9999 |
+| memory_access_patterns | 1.330 | 880 | 97.9% | 97.3% | 342.3 | 730 |
+| compute_intensive | 1.333 | 10000 | 100.0% | 99.8% | 334.0 | 9999 |
+| simple_arithmetic | 0.881 | 10000 | 92.7% | 99.2% | 421.1 | 8333 |
+| simple_fibonacci | 1.111 | 10000 | 99.8% | 0.0% | 372.5 | 9722 |
+| simple_sort | 0.913 | 23 | 100.0% | 17.6% | 409.8 | 19 |
+| simple_test | 1.143 | 7 | 0.0% | 0.0% | 368.0 | 3 |
+| validation_suite | 1.000 | 19 | 66.7% | 0.0% | 396.7 | 14 |
 
 ### Extended Benchmarks
 
@@ -336,7 +336,7 @@ python -m pytest tests/ --no-cov -q
 - **Code Quality**: Strict Ruff linting and formatting enforcing modern Python standards.
 - **Type Safety**: Complete MyPy validation with zero type errors across 50 source files.
 - **Documentation**: Comprehensive API documentation and architectural design documents.
-- **Performance**: Validated against 14 complex and simple assembly benchmarks ensuring cycle-accurate constraints.
+- **Performance**: Validated against 14 complex and simple assembly benchmarks ensuring behavioral constraints.
 - **Pre-commit Hooks**: 12 automated checks executing prior to all commits.
 
 ## Architecture
@@ -398,7 +398,7 @@ src/cache/
 - **Advanced Branch Prediction**: Multi-level hybrid and perceptron predictors.
 - **MSHR-based Caches**: Non-blocking memory accesses.
 - **Multi-Level Hierarchy**: L1 Instruction, L1 Data, and L2 Caches.
-- **Realistic Timing Models**: Cycle-accurate memory stall simulation.
+- **Realistic Timing Models**: Cycle-counted memory stall simulation.
 
 </td>
 </tr>

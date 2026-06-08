@@ -5,6 +5,19 @@ All notable changes to the Superscalar Pipeline Simulator will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-09
+
+### Architectural & Validation Fixes
+- **Power Model Fix**: Calibrated the baseline energy calculation to correctly convert milliwatts to picojoules (pJ), producing physically coherent Energy-Per-Instruction (EPI) numbers (10–100 pJ instead of 500k+).
+- **Stall Accounting Clarification**: Renamed ambiguous "Total Stalls" metric to "Issue Slot Stalls". This accurately tracks individual issue slot structural hazards rather than full-cycle stalls, resolving the perceived cycle accounting discrepancy.
+- **Out-of-Order Execution Default**: Enabled Out-of-Order (OOO) execution by default (`ooo_execution: true`) in `config.yaml` to showcase the simulator's core capabilities.
+- **OOO Instruction Dropping Fix**: Fixed a critical logic bug in `OutOfOrderExecuteStage` where incoming instructions were silently dropped if the OOO window was momentarily full.
+- **Removed Silent Error Swallowing**: Eradicated `try...except Exception` blocks wrapping the branch predictor and register renaming systems. The pipeline now structurally mandates correct instruction routing and physical limits instead of failing silently.
+- **Academic Framework Classification**: Updated documentation to classify the project as a "Cycle-Counted Behavioral Simulator" rather than a "Cycle-Accurate" state machine, setting accurate expectations for researchers.
+- **MyPy Typing**: Cleaned up the remaining `# type: ignore` suppressions in `main.py` through proper deferred initialization typing (`Any`).
+
+---
+
 ## [1.3.0] - 2026-06-08
 
 ### Critical Fixes (P0)
